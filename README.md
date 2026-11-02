@@ -23,7 +23,7 @@ Controlla Python (lo installa con winget se manca), crea l'ambiente, installa
 Planning Factory, chiude un'eventuale copia già aperta sulla stessa porta,
 avvia la Control Room e apre il browser su <http://127.0.0.1:8770>.
 Dal secondo avvio parte in pochi secondi. Opzioni: `avvia.bat mio.xlsx`,
-`avvia.bat salva`, `avvia.bat test`, `avvia.bat ferma`
+`avvia.bat semplice`, `avvia.bat test`, `avvia.bat ferma`
 (tutte in [docs/guida-installazione.md](docs/guida-installazione.md)).
 
 ### Linea di comando (Windows, Linux, macOS)
