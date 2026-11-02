@@ -131,6 +131,7 @@ if /i not "%MODE%"=="test" if not exist "%FIXTURE%" (
 )
 if /i "%MODE%"=="salva" (
     if not exist "istanza" mkdir "istanza"
+    if not exist "istanza\factory-source.json" echo {}> "istanza\factory-source.json"
     "%VPF%" secure-web --fixture "%FIXTURE%" --local-user --store "istanza\store.sqlite" --audit "istanza\audit.jsonl" --port %PORT%
 ) else (
     "%VPF%" web --fixture "%FIXTURE%" --port %PORT%
