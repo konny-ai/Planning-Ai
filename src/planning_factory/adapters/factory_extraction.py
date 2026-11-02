@@ -41,7 +41,7 @@ class FactoryExtraction:
         raw = {'server': r'SERVER\ISTANZA', 'database': 'Factory_Cliente', 'user': '', 'driver': 'ODBC Driver 17 for SQL Server', 'views': dict(_DEFAULT_VIEWS)}
         try:
             saved = json.loads(self.config_path.read_text(encoding='utf-8'))
-        except FileNotFoundError:
+        except (FileNotFoundError, ValueError):
             saved = {}
         if isinstance(saved, dict):
             raw.update({k: v for k, v in saved.items() if k in ('server', 'database', 'user', 'views', 'driver')})
@@ -76,37 +76,64 @@ class FactoryExtraction:
         self.config_path.write_text(json.dumps(clean, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
         return self.config()
 
-    def test_connection(self, data):
-        """Check SQL login and SELECT access to each configured export view; never writes."""
-        if not isinstance(data, dict) or not {'server', 'database', 'user', 'password', 'views'} <= data.keys() or set(data)-{'server','database','user','password','views','driver'}:
-            raise ValidationError(['server, database, user, password e views richiesti'])
-        clean = self._validated_config({k:v for k,v in data.items() if k!='password'})
+    @staticmethod
+    def _password(data, clean):
         password = data['password']
         if not isinstance(password, str) or len(password) > 1024:
             raise ValidationError(['password non valida'])
         if clean['user'] and not password:
             raise ValidationError(['inserisci la password dell’utente SQL configurato'])
+        return password
 
+    @staticmethod
+    def _connection_string(clean, password, *, readonly=True):
         def odbc_value(value):
             return '{' + str(value).replace('}', '}}') + '}'
 
         parts = [f'DRIVER={{{clean["driver"]}}}', f"SERVER={odbc_value(clean['server'])}",
-                 f"DATABASE={odbc_value(clean['database'])}", 'Encrypt=yes', 'TrustServerCertificate=yes',
-                 'ApplicationIntent=ReadOnly']
+                 f"DATABASE={odbc_value(clean['database'])}", 'Encrypt=yes', 'TrustServerCertificate=yes']
+        if readonly:
+            parts.append('ApplicationIntent=ReadOnly')
         if clean['user']:
             parts += [f"UID={odbc_value(clean['user'])}", f'PWD={odbc_value(password)}']
         else:
             parts.append('Trusted_Connection=yes')
+        return ';'.join(parts)
+
+    @staticmethod
+    def _explain(exc, password):
+        detail = str(exc).replace(password, '[omessa]') if password else str(exc)
+        if isinstance(exc, ModuleNotFoundError) and exc.name == 'pyodbc':
+            return ('Manca il componente Python pyodbc, necessario per leggere SQL Server. '
+                    'Riavvia con avvia.bat (lo installa da solo) oppure esegui: pip install pyodbc')
+        if '18456' in detail or 'Login failed' in detail:
+            return 'Accesso SQL rifiutato: verifica login/password e che SQL Server consenta l’autenticazione SQL.'
+        if '-2146893042' in detail or 'No credentials are available' in detail:
+            return 'Handshake SSL/TLS SQL non riuscito (SEC_E_NO_CREDENTIALS). Dettaglio driver: ' + detail[:500]
+        if 'IM002' in detail:
+            return 'Driver ODBC per SQL Server non trovato: installa Microsoft ODBC Driver 18.'
+        if '4060' in detail or 'Cannot open database' in detail:
+            return 'Login riuscito ma database non accessibile. Verifica nome database e permessi.'
+        if 'Login timeout' in detail or '08001' in detail:
+            return 'Server/istanza/database non raggiungibili. Dettaglio driver: ' + detail[:500]
+        return detail[:700]
+
+    def test_connection(self, data):
+        """Check SQL login and SELECT access to each configured export view; never writes."""
+        if not isinstance(data, dict) or not {'server', 'database', 'user', 'password', 'views'} <= data.keys() or set(data)-{'server','database','user','password','views','driver'}:
+            raise ValidationError(['server, database, user, password e views richiesti'])
+        clean = self._validated_config({k:v for k,v in data.items() if k!='password'})
+        password = self._password(data, clean)
         started = time.monotonic()
         try:
             import pyodbc
-            connection = pyodbc.connect(';'.join(parts), readonly=True, timeout=12)
+            connection = pyodbc.connect(self._connection_string(clean, password), readonly=True, timeout=12)
             try:
                 connection.timeout = 12
                 cursor = connection.cursor()
                 cursor.execute('SELECT DB_NAME(), @@SERVERNAME')
                 database, server = cursor.fetchone()
-                checked = []
+                checked, missing, issues = [], [], []
                 definitions={v['key']:v for v in factory_views.contract()['views']}
                 for label, value in clean['views'].items():
                     table = '.'.join('[' + part + ']' for part in value.split('.'))
@@ -117,30 +144,60 @@ class FactoryExtraction:
                         if actual!=required:
                             raise ValueError('Colonne non conformi al contratto della vista: mancanti '+str(sorted(required-actual))+', aggiunte '+str(sorted(actual-required)))
                     except Exception as exc:
-                        raise RuntimeError(f'{label} ({value}): {exc}') from None
+                        text = str(exc)
+                        if '42S02' in text or 'Invalid object name' in text:
+                            missing.append(label)
+                            issues.append(f'{label} ({value}): vista non presente nel database')
+                        else:
+                            issues.append(f'{label} ({value}): {text}')
+                        continue
                     checked.append(label)
                 cursor.close()
             finally:
                 connection.close()
+            latency = round((time.monotonic() - started) * 1000)
+            if issues:
+                error = '; '.join(issues)
+                if missing:
+                    error = (f'Mancano {len(missing)} viste nel database. Premi «Crea viste mancanti» per crearle '
+                             'dai modelli del progetto. ') + error
+                return {'ok': False, 'server': server, 'database': database, 'error': error[:900],
+                        'missing_views': missing, 'checked_views': len(checked), 'latency_ms': latency}
             return {'ok': True, 'server': server, 'database': database,
                     'authentication': 'sql' if clean['user'] else 'windows', 'checked_views': len(checked),
-                    'latency_ms': round((time.monotonic() - started) * 1000)}
+                    'missing_views': [], 'latency_ms': latency}
         except Exception as exc:
-            detail = str(exc).replace(password, '[omessa]') if password else str(exc)
-            if '18456' in detail or 'Login failed' in detail:
-                error = 'Accesso SQL rifiutato: verifica login/password e che SQL Server consenta l’autenticazione SQL.'
-            elif '-2146893042' in detail or 'No credentials are available' in detail:
-                error = 'Handshake SSL/TLS SQL non riuscito (SEC_E_NO_CREDENTIALS). Dettaglio driver: ' + detail[:500]
-            elif 'IM002' in detail:
-                error = 'Driver ODBC per SQL Server non trovato: installa Microsoft ODBC Driver 18.'
-            elif '4060' in detail or 'Cannot open database' in detail:
-                error = 'Login riuscito ma database non accessibile. Verifica nome database e permessi.'
-            elif 'Login timeout' in detail or '08001' in detail:
-                error = 'Server/istanza/database non raggiungibili. Dettaglio driver: ' + detail[:500]
-            else:
-                error = detail[:700]
-            return {'ok': False, 'server': clean['server'], 'database': clean['database'], 'error': error,
+            return {'ok': False, 'server': clean['server'], 'database': clean['database'],
+                    'error': self._explain(exc, password), 'missing_views': [],
                     'latency_ms': round((time.monotonic() - started) * 1000)}
+
+    def create_views(self, data):
+        """The only write of the Factory link: creates the views that are missing, nothing else."""
+        from planning_factory.adapters import factory_view_install
+        if not isinstance(data, dict) or not {'server', 'database', 'user', 'password', 'views'} <= data.keys() or set(data)-{'server','database','user','password','views','driver'}:
+            raise ValidationError(['server, database, user, password e views richiesti'])
+        clean = self._validated_config({k:v for k,v in data.items() if k!='password'})
+        password = self._password(data, clean)
+        try:
+            import pyodbc
+            connection = pyodbc.connect(self._connection_string(clean, password, readonly=False), autocommit=True, timeout=12)
+            try:
+                connection.timeout = 120
+                result = factory_view_install.install(connection, clean['views'])
+            finally:
+                connection.close()
+        except ValidationError:
+            raise
+        except Exception as exc:
+            return {'ok': False, 'created': [], 'present': [], 'failed': [],
+                    'error': self._explain(exc, password)}
+        result['ok'] = not result['failed']
+        if result['failed']:
+            result['error'] = 'Non tutte le viste sono state create: ' + '; '.join(
+                f"{f['view']}: {f['error']}" for f in result['failed'])[:800]
+        else:
+            result['check'] = self.test_connection(data)
+        return result
 
     def status(self):
         with self.lock:

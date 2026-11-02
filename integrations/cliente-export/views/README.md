@@ -45,7 +45,19 @@ finestra richiesta senza cancellare le righe originali dalla provenienza Excel.
 Le date locali assumono Europe/Rome. Le percentuali dei requisiti setup/run
 sono 0–100 nell'export e diventano percentuali Excel 0–1. Non sono velocità.
 
-## Installazione
+## Creazione automatica delle viste mancanti
+
+Nella schermata Fonti dati, il pulsante **Crea viste mancanti** (solo amministratore,
+con conferma e password SQL) crea nel database configurato le viste che non
+esistono, partendo dai file di questa cartella: prima il perimetro, poi le
+otto viste, con i nomi scritti nel pannello. Le viste gia' presenti, anche se
+modificate, non vengono toccate; un oggetto non-vista con lo stesso nome viene
+segnalato e lasciato com'e'. Serve il permesso CREATE VIEW. Se manca un oggetto
+Factory da cui dipendono (tabelle o funzioni non presenti in quella versione di
+Factory), la vista viene segnalata con il motivo e le altre vengono create
+comunque. Dopo la creazione il pannello verifica le colonne rispetto al contratto.
+
+## Installazione manuale
 
 Applicare i nove file in ordine numerico sul database di destinazione
 autorizzato. Creano o aggiornano soltanto oggetti `dbo.X_CLIENTE_Planning_*`.

@@ -99,8 +99,12 @@ if "%DAINSTALLARE%"=="0" (
 )
 if "%DAINSTALLARE%"=="1" (
     echo [3/5] Installo Planning Factory ^(serve internet solo la prima volta^)...
-    "%VPY%" -m pip install --disable-pip-version-check -q -e .
-    if errorlevel 1 goto :errore
+    "%VPY%" -m pip install --disable-pip-version-check -q -e ".[factory]"
+    if errorlevel 1 (
+        echo       pyodbc non installato: installo solo la parte base ^(il collegamento a Factory SQL non funzionera^).
+        "%VPY%" -m pip install --disable-pip-version-check -q -e .
+        if errorlevel 1 goto :errore
+    )
     echo ok> "%STAMP%"
 ) else (
     echo [3/5] Planning Factory gia' installato e aggiornato.
@@ -132,6 +136,7 @@ if /i not "%MODE%"=="test" if not exist "%FIXTURE%" (
 if /i "%MODE%"=="salva" (
     if not exist "istanza" mkdir "istanza"
     if not exist "istanza\factory-source.json" echo {}> "istanza\factory-source.json"
+    for %%F in ("istanza\factory-source.json") do if %%~zF==0 echo {}> "istanza\factory-source.json"
     "%VPF%" secure-web --fixture "%FIXTURE%" --local-user --store "istanza\store.sqlite" --audit "istanza\audit.jsonl" --port %PORT%
 ) else (
     "%VPF%" web --fixture "%FIXTURE%" --port %PORT%

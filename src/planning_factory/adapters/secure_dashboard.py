@@ -322,6 +322,7 @@ def make_secure_handler(app):
                     sync=app.factory_sync
                     if path=='/api/factory-source/config':result=sync.save_config(data)
                     elif path=='/api/factory-source/test':result=sync.test_connection(data)
+                    elif path=='/api/factory-source/create-views':result=sync.create_views(data)
                     elif path=='/api/factory-source/run':result=sync.start(data,user[0])
                     elif path=='/api/factory-source/resolve':result=sync.resolve(data,user[0])
                     elif path=='/api/factory-source/cancel':

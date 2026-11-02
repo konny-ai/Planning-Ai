@@ -193,7 +193,7 @@
     session:null, catalog:null, entities:{}, ctx:null, root:null, view:null,
     tab:{}, folded:new Set(), detail:null, query:{}, page:{}, sort:{}, status:{}, rows:{}, loading:false,
     selected:null, form:null, history:null, busy:false, planStale:false,
-    sources:null, factorySource:null, factoryTest:null, factoryOpen:new Set(), syncedJob:null, ai:null, models:{}, modelFilter:{provider:null, q:'', tools:true, images:false, free:false, order:'recenti'},
+    sources:null, factorySource:null, factoryTest:null, factoryCreate:null, factoryOpen:new Set(), syncedJob:null, ai:null, models:{}, modelFilter:{provider:null, q:'', tools:true, images:false, free:false, order:'recenti'},
     aiDraft:null, ledger:null, tests:{},
   };
   const groupOf = (view) => GROUPS.find(g => g.view === view);
@@ -743,12 +743,22 @@
           '<details data-factory-area="'+esc(a.key)+'"'+(S.factoryOpen.has(a.key)?' open':'')+'><summary>Contenuto dell’area</summary><ul>'+a.datasets.map(d=>'<li><strong>'+esc(d.tipo)+'</strong>'+(count?.[d.name]===undefined?'':' · '+nf(count[d.name])+' righe')+'<p>'+esc(d.description)+'</p></li>').join('')+'</ul></details></section>';
       }).join('')+'</div><p class="factory-sql-note">Le tabelle operative dell’Excel alimentano il piano. I dettagli originali e i record fuori perimetro restano in Provenienza record.</p>';
     if(S.factoryTest) html+='<p class="info-panel">'+esc(S.factoryTest.busy?'Verifica SQL e struttura delle viste in corso…':S.factoryTest.ok?'Collegamento riuscito: '+S.factoryTest.checked_views+'/'+total+' viste accessibili e conformi al contratto.':S.factoryTest.error)+'</p>';
+    if(S.factoryCreate) html+='<p class="info-panel" role="status">'+esc(S.factoryCreate.busy?'Creazione delle viste mancanti in corso…':factoryCreateText(S.factoryCreate))+'</p>';
     html+='<div class="panel-tools"><button class="btn btn-muted" type="button" data-factory="save"'+disabled+'>Salva collegamento</button>'+
       '<button class="btn btn-muted" type="button" data-factory="test"'+disabled+'>Verifica SQL e viste</button>'+
+      '<button class="btn '+(S.factoryTest?.missing_views?.length?'btn-primary':'btn-muted')+'" type="button" data-factory="create"'+disabled+' title="Crea nel database le viste che mancano, dai modelli SQL del progetto. Non modifica quelle esistenti.">Crea viste mancanti</button>'+
       '<button class="btn btn-primary" type="button" data-factory="run"'+disabled+'>Sincronizza Factory → Excel → Piano</button>'+
       (editing&&running?'<button class="btn btn-muted" type="button" data-factory="cancel">Annulla sincronizzazione</button>':'')+'</div>'+
-      '<p>Factory viene letta, senza scritture. La password non viene salvata. Prima di ogni aggiornamento viene conservata una copia dell’Excel; le revisioni dei piani restano nell’archivio.</p></article>';
+      '<p>Factory viene letta, senza scritture: l’unica eccezione è «Crea viste mancanti», che su richiesta aggiunge al database solo le viste non ancora presenti. La password non viene salvata. Prima di ogni aggiornamento viene conservata una copia dell’Excel; le revisioni dei piani restano nell’archivio.</p></article>';
     return html;
+  }
+  function factoryCreateText(r){
+    const names=list=>list.map(n=>n.replace(/^dbo\./,'')).join(', ');
+    if(r.error&&!(r.created||[]).length&&!(r.failed||[]).length) return r.error;
+    let text=(r.created||[]).length?'Create '+r.created.length+' viste: '+names(r.created)+'. ':'Nessuna vista da creare. ';
+    if((r.present||[]).length) text+=r.present.length+' già presenti, lasciate invariate. ';
+    if((r.failed||[]).length) text+='Non create: '+r.failed.map(f=>f.view.replace(/^dbo\./,'')+' ('+f.error+')').join('; ')+'.';
+    return text;
   }
   let syncTimer=0;
   async function syncStatus(){
@@ -1162,11 +1172,16 @@
       const action=t.dataset.factory, password=value('password'),start=value('start');
       const config={server:value('server').trim(),database:value('database').trim(),user:value('user').trim(),driver:value('driver'),
         views:Object.fromEntries(Object.keys(S.factorySource.views||{}).map(k=>[k,value('view:'+k).trim()]))};
+      if(action==='create'&&!confirm('Verranno create nel database «'+config.database+'» sul server «'+config.server+'» le viste Factory che mancano (solo CREATE VIEW, nessun dato modificato, viste già presenti non toccate). Procedere?')) return;
       panel.querySelector('[name="factory-password"]').value='';t.disabled=true;
       try{
         if(action==='test'){
           S.factorySource={...S.factorySource,...config};
-          S.factoryTest={busy:true};paint();S.factoryTest=await api('/api/factory-source/test',{...config,password});
+          S.factoryCreate=null;S.factoryTest={busy:true};paint();S.factoryTest=await api('/api/factory-source/test',{...config,password});
+        }else if(action==='create'){
+          S.factorySource={...S.factorySource,...config};
+          S.factoryCreate={busy:true};paint();S.factoryCreate=await api('/api/factory-source/create-views',{...config,password});
+          S.factoryTest=S.factoryCreate.check||null;
         }else if(action==='cancel') S.factorySource=await api('/api/factory-source/cancel',{});
         else if(action==='excel'||action==='factory') S.factorySource=await api('/api/factory-source/resolve',{job_id:S.factorySource.job_id,decision:action});
         else{
@@ -1175,7 +1190,7 @@
           else toast('Collegamento Factory salvato.');
         }
         paint();if(S.factorySource.state==='running')syncTimer=setTimeout(()=>syncStatus().catch(e=>toast(e.message)),1000);
-      }catch(error){S.factoryTest=null;toast(error.message,12000);paint();}
+      }catch(error){S.factoryTest=null;S.factoryCreate=null;toast(error.message,12000);paint();}
       return;
     }
     const g = groupOf(S.view), entity = g && currentEntity(g);

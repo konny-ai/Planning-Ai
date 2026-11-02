@@ -73,7 +73,7 @@ driver, views) e `factory-sync.json` (pipeline_root, bootstrap_baseline).
 pipeline_root deve contenere il pacchetto installato e gli script tracciati di
 integrations/cliente-export, incluse le viste SQL documentate, e
 integrations/factory-export/tools per la conversione del formato di scambio.
-Sono necessari pyodbc, il driver selezionato e i permessi di lettura sulle
+Sono necessari pyodbc (installato da `avvia.bat`, oppure `pip install pyodbc`), il driver selezionato e i permessi di lettura sulle
 otto viste, con accesso alle rispettive dipendenze SQL. Il test rapido delle viste non sostituisce il collaudo
 dell'export completo.
 
