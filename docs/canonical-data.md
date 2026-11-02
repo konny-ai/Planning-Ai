@@ -208,7 +208,7 @@ Le stesse disponibilità lette da SQL o da CSV producono lo stesso scenario e lo
 
 ## Nesting e CAM — #84
 
-Il collegamento al CAM serve a tutti i clienti con taglio lamiera. Il CAM, Alma o altri, si legge con il connettore `sql` o `file`, con query o tabelle dichiarate nella configurazione. I codici dei pezzi del CAM si collegano alle fasi dell'ERP con una mappa `identity` (vedi sotto). Lo schema del database di un CAM specifico **non** è nel codice.
+Il collegamento al CAM serve a tutti i clienti con taglio lamiera. Il CAM si legge con il connettore `sql` o `file`, con query o tabelle dichiarate nella configurazione. I codici dei pezzi del CAM si collegano alle fasi dell'ERP con una mappa `identity` (vedi sotto). Lo schema del database di un CAM specifico **non** è nel codice.
 
 ```json
 "cam": {"connector": "sql", "identity": {"operation": "cam-parti"}, "options": {
@@ -345,9 +345,9 @@ Le chiavi di sistemi diversi si collegano solo con tabelle esplicite (dominio `i
 ```json
 "sources": {
   "erp":  {"connector": "file", "options": {"tables": {"identity_map": "corrispondenze.csv", "...": "..."}}},
-  "alma": {"connector": "...", "identity": {"operation": "alma-parti"}}
+  "cam": {"connector": "...", "identity": {"operation": "cam-parti"}}
 },
-"domains": {"identity": {"sources": ["erp"]}, "nesting": {"sources": ["alma"]}}
+"domains": {"identity": {"sources": ["erp"]}, "nesting": {"sources": ["cam"]}}
 ```
 
 - `identity` di una sorgente indica, per tipo di riferimento (`calendar`, `resource`, `order`, `operation`, `nest`), quale mappa traduce le chiavi di quella sorgente.
@@ -425,6 +425,6 @@ Il piano resta legato al manifest tramite `scenario_digest`. **Il contratto del 
 ## Limiti dichiarati
 
 - Il dominio `transport` è riservato.
-- Il connettore Factory legge l'export normalizzato, non ancora il database per dominio (#83). CAM, AS400 e MES passano dal connettore `sql`, con query dichiarate, verificato solo su SQLite. Non c'è ancora un collaudo su un database Alma reale (#94).
+- Il connettore Factory legge l'export normalizzato, non ancora il database per dominio (#83). CAM, AS400 e MES passano dal connettore `sql`, con query dichiarate, verificato solo su SQLite. Non c'è ancora un collaudo su un database CAM reale (#94).
 - La lettura è solo a snapshot completo. L'evento di ricalcolo si ottiene confrontando i manifest (`changes`); non esistono notifiche push.
 - L'orizzonte è fisso nel file di associazione: non esiste un orizzonte relativo come "oggi + N giorni".

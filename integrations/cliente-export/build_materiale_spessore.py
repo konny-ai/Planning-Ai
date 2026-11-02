@@ -4,7 +4,7 @@ export-canonical parte dallo scenario motore, che non porta attributi di lamiera
 senza ``material`` e ``thickness_mm`` (decompose.py). Per taglio laser, ossitaglio, plasma, punzonatura e
 nesting sono i dati base: regole con ambito materiale/spessore, Control Room e assistente li devono vedere
 come campi canonici, non solo come testo di presentazione. Qui si riprendono dalle stesse fonti di
-build_descrizioni.py (fase: lotto A_LOT, codice materiale e dimensione Z; programma: lamiera Alma della
+build_descrizioni.py (fase: lotto A_LOT, codice materiale e dimensione Z; programma: lamiera CAM della
 prima riga di 12_nesting_lamiere) e si scrivono nei campi canonici ``operation`` e ``nest``. Un dato
 assente in Factory resta assente: nessun valore inventato, i conteggi sono stampati.
 

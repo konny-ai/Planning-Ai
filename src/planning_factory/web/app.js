@@ -1564,7 +1564,7 @@
     });
     const head=columns.map(c=>'<th aria-sort="'+(c[0]===col[0]?(sort.dir>0?'ascending':'descending'):'none')+'"><button type="button" class="sort-button'+(c[0]===col[0]?' active':'')+
       '" data-action="nest-sort" data-key="'+c[0]+'">'+esc(c[1])+'<span aria-hidden="true">'+(c[0]===col[0]?(sort.dir>0?' ▲':' ▼'):' ↕')+'</span></button></th>').join('');
-    return '<article class="panel"><div class="panel-title"><div><h2>Programmi di taglio</h2><p class="panel-sub">'+rows.length+' programmi · clic sull’intestazione per ordinare · lamiere dai programmi Alma</p></div>'+
+    return '<article class="panel"><div class="panel-title"><div><h2>Programmi di taglio</h2><p class="panel-sub">'+rows.length+' programmi · clic sull’intestazione per ordinare · lamiere dai programmi CAM</p></div>'+
       '<div class="panel-tools"><div class="search-wrap"><input id="quick-search" class="toolbar-search" value="'+esc(state.query)+'" placeholder="Programma, lamiera, commessa…" aria-label="Cerca programma"></div></div></div>'+
       '<div class="table-scroll"><table class="data-table"><thead><tr>'+head+'</tr></thead><tbody>'+
       rows.slice(0,200).map(x=>{
@@ -1957,7 +1957,7 @@
     const related=taskOrders(selected);
     const ops=operationsById();
     const nest=nestInfo(selected), material=materialState(selected), done=progressShare(selected);
-    const family={cut:nestId(selected)?'Nesting Alma':'Taglio',bend:'Piegatura',finish:'Lavorazione',ext:'Esterno'}[phaseFamily(selected)];
+    const family={cut:nestId(selected)?'Nesting CAM':'Taglio',bend:'Piegatura',finish:'Lavorazione',ext:'Esterno'}[phaseFamily(selected)];
     const key=(k,v)=>v?'<div class="detail-key"><span>'+esc(k)+'</span><span>'+v+'</span></div>':'';
     const machines=selected.demands.filter(d=>!/^OP:/.test(d.resource_id)).map(d=>resourceTitle(d.resource_id));
     const people=selected.demands.filter(d=>/^OP:/.test(d.resource_id)).map(d=>resourceTitle(d.resource_id));
@@ -3358,7 +3358,7 @@
     const chips=[];
     const startDay=source.planning_start||data.scenario.start;
     chips.push(['ok','Factory · dati al '+fmt(startDay,'day')]);
-    if(domains.nesting)chips.push(['ok','Nesting Alma · '+(data.scenario.nestings||[]).length+' programmi']);
+    if(domains.nesting)chips.push(['ok','Nesting CAM · '+(data.scenario.nestings||[]).length+' programmi']);
     if(domains.materials){
       const shortages=(canonical.issues||[]).filter(i=>i.code==='material_shortage').length;
       const note=source.materials_note;

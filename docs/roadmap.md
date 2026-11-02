@@ -142,7 +142,7 @@ Il motore legge solo dati canonici per dominio. Le sorgenti (ERP, CAM, AS400, ME
 - [x] Contratto dei domini, connettori e costruttore di scenario: #81 ([v1](canonical-data.md); `transport` riservato)
 - [x] Connettore file per tutti i domini: #82 (CSV, Excel `.xlsx`)
 - [ ] Connettore Factory (migrazione dell'export attuale): #83 — primo passo fatto: connettore `factory-export` sull'export normalizzato
-- [x] Dominio nesting e connettore CAM, primo Alma: #84 (CAM via connettore `sql`; collaudo Alma reale in #94)
+- [x] Dominio nesting e connettore CAM: #84 (CAM via connettore `sql`; collaudo CAM reale in #94)
 - [x] Connettore disponibilità materiale (AS400/DB2, SQL, file): #85
 - [x] Connettore avanzamento: #86 (dominio e politiche di residuo; sorgenti via `sql`/`file`; congelamento con P1 di #78)
 - [x] Rapporto qualità dati e corrispondenze tra sistemi: #87 (materiali senza data con #85)

@@ -4,7 +4,7 @@ Il modello canonico porta solo identificativi e dati fisici (ADR 004): una macch
 commessa e' l'ID interno ``609607``. Per leggere il piano servono i testi che il planner conosce: nome della
 macchina, codice commessa e cliente, articolo, materiale e spessore, fase, codice del programma di nesting.
 Questo script li ricava dalla stessa estrazione Factory (scenario.json di export_factory_scenario.py) e dai CSV
-dei programmi Alma (10_nesting_programmi, 12_nesting_lamiere), solo per gli ID presenti nello scenario
+dei programmi CAM (10_nesting_programmi, 12_nesting_lamiere), solo per gli ID presenti nello scenario
 canonico. Il file ``descrizioni.json`` sta accanto al binding: la Control Room lo mostra, il motore non lo
 legge e l'impronta dello scenario non cambia. Un testo assente resta assente: nessun valore inventato.
 

@@ -12,7 +12,7 @@ Ogni fabbrica tiene gli stessi tipi di dato in sistemi diversi. Per esempio, la 
 - da Factory stesso;
 - da un foglio compilato a mano.
 
-I programmi di taglio arrivano dal CAM di nesting (Alma o altri). L'avanzamento arriva da Factory, da un MES o da un terminale di reparto.
+I programmi di taglio arrivano dal CAM di nesting (qualsiasi CAM). L'avanzamento arriva da Factory, da un MES o da un terminale di reparto.
 
 Oggi l'unico ingresso strutturato è l'export Factory (`integrations/factory-export`,
 `adapters/factory.py`). Aggiungere un cliente con fonti diverse richiederebbe
@@ -91,7 +91,7 @@ Uscite, con connettori separati e scrittura autorizzata esplicitamente:
 |---|---|---|
 | File (CSV, Excel, JSON) | tutti | Per installazioni senza integrazione e come ripiego manuale |
 | Factory | resources, calendars, orders, routings, subcontract, progress, materials | Evoluzione di `integrations/factory-export`: query già pronte, da dividere per dominio |
-| CAM di nesting (primo: Alma CAM/Quote) | nesting | Struttura comune agli altri CAM |
+| CAM di nesting (primo CAM supportato) | nesting | Struttura comune agli altri CAM |
 | Disponibilità materiale da DB2/AS400 o da SQL generico | materials | Query configurabile e mappatura dichiarata |
 | MES / avanzamento web | progress | Polling o evento |
 

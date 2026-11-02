@@ -13,9 +13,9 @@ from tests.test_canonical import ALL, NOW, WORKSHOP, batches_from, binding, code
 
 CAM_NEST = {'schema_version': 1, 'records': {
     'nest': [{'id': 'PL-77', 'duration_seconds': 10800, 'setup_seconds': 1800}],
-    'nest_member': [{'nest_id': 'PL-77', 'operation_id': 'ALMA-1'}, {'nest_id': 'PL-77', 'operation_id': 'ALMA-2'}]}}
-MAP = [{'map': 'alma-parti', 'external_id': 'ALMA-1', 'canonical_id': 'ord-a/taglio'},
-       {'map': 'alma-parti', 'external_id': 'ALMA-2', 'canonical_id': 'ord-b/taglio'}]
+    'nest_member': [{'nest_id': 'PL-77', 'operation_id': 'CAM-1'}, {'nest_id': 'PL-77', 'operation_id': 'CAM-2'}]}}
+MAP = [{'map': 'cam-parti', 'external_id': 'CAM-1', 'canonical_id': 'ord-a/taglio'},
+       {'map': 'cam-parti', 'external_id': 'CAM-2', 'canonical_id': 'ord-b/taglio'}]
 
 
 def with_identity(cam_identity=True, **extra):
@@ -25,7 +25,7 @@ def with_identity(cam_identity=True, **extra):
             'domains': {d: {'sources': ['cam' if d == 'nesting' else 'erp']} for d in ALL}}
     data['domains']['identity'] = {'sources': ['erp']}
     if cam_identity:
-        data['sources']['cam']['identity'] = {'operation': 'alma-parti'}
+        data['sources']['cam']['identity'] = {'operation': 'cam-parti'}
     data.update(extra)
     return parse_binding(data, Path('.'))
 
@@ -47,8 +47,8 @@ class IdentityMapTests(unittest.TestCase):
         self.assertEqual(2, result.manifest['domains']['identity']['records'])
 
     def test_unmatched_keys_are_reported_and_never_guessed(self):
-        self.cam['records']['nest_member'].append({'nest_id': 'PL-77', 'operation_id': 'ALMA-9'})
-        self.cam['records']['nest_member'].append({'nest_id': 'PL-77', 'operation_id': 'alma-1'})  # case differs: no match
+        self.cam['records']['nest_member'].append({'nest_id': 'PL-77', 'operation_id': 'CAM-9'})
+        self.cam['records']['nest_member'].append({'nest_id': 'PL-77', 'operation_id': 'cam-1'})  # case differs: no match
         b = with_identity()
         result = build_scenario(b, batches_from({'erp': self.erp, 'cam': self.cam}, b), NOW)
         self.assertIsNotNone(result.scenario)

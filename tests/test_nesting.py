@@ -34,7 +34,7 @@ class NestingDomainTests(unittest.TestCase):
 
     def test_multi_order_program_is_one_unit_on_the_machine_chosen_by_the_cam(self):
         self.nest.update(resource_id='LASER-2', status='released', version='3', material='S275', thickness_mm='10',
-                         sheets=2, preview='alma/PL-1.png')
+                         sheets=2, preview='cam/PL-1.png')
         for member in self.bundle['records']['nest_member']:
             member['quantity'] = '4'
         result = self.build()
