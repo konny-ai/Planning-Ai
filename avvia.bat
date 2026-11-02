@@ -28,7 +28,7 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 set "MODE=salva"
-set "FIXTURE=examples\workshop.json"
+set "FIXTURE=examples\planning-workbookending.xlsx"
 set "PORT=8770"
 
 if /i "%~1"=="test"  set "MODE=test"
