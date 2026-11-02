@@ -7,6 +7,41 @@ gli esiti attesi sono riportati sotto i comandi.
 
 Non servono database, server o account: tutto funziona con file locali.
 
+## 0. Windows: il modo più semplice, `avvia.bat`
+
+Nella radice del repository c'è `avvia.bat`. Doppio clic (oppure da
+PowerShell/cmd nella cartella) e fa tutto da solo:
+
+| Passo | Cosa fa |
+| --- | --- |
+| 1 | cerca Python 3.12+ (`py -3.13/-3.12`, poi `python`); se manca lo installa con `winget` |
+| 2 | crea l'ambiente `.venv` se non esiste (lo ricrea se usa un Python troppo vecchio) |
+| 3 | installa Planning Factory solo se serve (prima volta o se `pyproject.toml` è cambiato) |
+| 4 | se una copia di Planning Factory è già aperta sulla stessa porta la chiude; se la porta è di un altro programma **non tocca nulla** e ti avvisa |
+| 5 | avvia la Control Room e apre il browser |
+
+Chiudi la finestra nera (o `CTRL+C`) per fermare il server.
+
+```bat
+avvia.bat                    esempio incluso, porta 8770
+avvia.bat esempio 8800       esempio incluso, porta 8800
+avvia.bat mio.xlsx           un tuo workbook Excel o uno scenario .json
+avvia.bat mio.xlsx 8800      con un'altra porta
+avvia.bat salva              con salvataggio: revisioni, regole e audit nella cartella "istanza"
+avvia.bat test               esegue i 749 test (circa 2 minuti)
+avvia.bat ferma              chiude il server in esecuzione
+```
+
+Note:
+
+- La prima esecuzione scarica le dipendenze: serve internet solo allora.
+- Se `winget` installa Python, la finestra potrebbe non vederlo subito: chiudila e rilancia `avvia.bat`.
+- Variabili facoltative: `AVVIA_NOBROWSER=1` (non apre il browser) e `AVVIA_NOPAUSE=1`.
+- Lo script usa `tools/libera_porta.ps1`: riconosce le copie dalla riga di comando
+  (`planning-factory ... --port N`), quindi non chiude mai altri programmi.
+- Windows SmartScreen può mostrare un avviso la prima volta: "Ulteriori informazioni" → "Esegui comunque".
+- Su Linux e macOS usa i comandi dei paragrafi seguenti.
+
 ## 1. Requisiti
 
 | Cosa | Versione | Note |

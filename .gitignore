@@ -31,3 +31,4 @@ data/private/
 *.ldf
 /out/
 /tmp*/
+/istanza/
