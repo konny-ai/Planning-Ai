@@ -23,7 +23,7 @@ PowerShell/cmd nella cartella) e fa tutto da solo:
 Chiudi la finestra nera (o `CTRL+C`) per fermare il server.
 
 ```bat
-avvia.bat                    Control Room completa, con l'Excel di esempio, porta 8770
+avvia.bat                    Control Room completa, con `esempio-completo.xlsx` (48 commesse, 10 macchine), porta 8770
 avvia.bat esempio 8800       esempio incluso, porta 8800
 avvia.bat mio.xlsx           il tuo workbook Excel (i dati stanno solo nell'Excel) o uno scenario .json
 avvia.bat mio.xlsx 8800      con un'altra porta

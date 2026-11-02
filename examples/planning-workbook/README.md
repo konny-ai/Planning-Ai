@@ -6,6 +6,7 @@ rifiutato finché date, dati produttivi e politiche non sono pronti.
 | File | Caso |
 | --- | --- |
 | `template.xlsx` | 59 tabelle nominate, indice e configurazioni da completare |
+| `esempio-completo.xlsx` | 48 commesse, 240 fasi, 10 macchine con alternative e precedenze (dati inventati; si rigenera con `python tools/genera_esempio_completo.py`). È l'esempio usato da `avvia.bat` |
 | `bending.xlsx` | 200 pezzi × 5 min, setup 120 min, 1 macchina e 2 operatori nel ciclo |
 | `unattended.xlsx` | Stessi tempi; 1 operatore nel setup e nessuno nel ciclo, macchina aperta di notte |
 | `fractional.xlsx` | Stessi tempi; ogni operatore occupato al 25% nel ciclo, dentro i turni umani |

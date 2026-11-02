@@ -28,7 +28,7 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 set "MODE=salva"
-set "FIXTURE=examples\planning-workbook\bending.xlsx"
+set "FIXTURE=examples\planning-workbook\esempio-completo.xlsx"
 set "PORT=8770"
 
 if /i "%~1"=="test"  set "MODE=test"
