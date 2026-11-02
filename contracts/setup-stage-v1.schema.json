@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://planning-factory.local/contracts/setup-stage-v1.schema.json",
+  "title": "Planning Factory - Contratto canonico attrezzaggi di fase v1",
+  "description": "Indipendente da Factory ERP. La validazione incrociata degli ID/candidate e delle risorse si esegue anche con load_setup_contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "resources",
+    "initial_machine_states",
+    "phases"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "resources": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/label"
+          },
+          "kind": {
+            "$ref": "#/$defs/kind"
+          }
+        }
+      }
+    },
+    "initial_machine_states": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/label"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "phases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "machine_id",
+          "target_state",
+          "setup_seconds",
+          "setup_requirements",
+          "run_requirements"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/label"
+          },
+          "machine_id": {
+            "$ref": "#/$defs/label"
+          },
+          "target_state": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/label"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "setup_seconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "setup_locked": {
+            "type": "boolean",
+            "default": false
+          },
+          "setup_requirements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/requirement"
+            }
+          },
+          "run_requirements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/requirement"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "machine",
+        "operator",
+        "tool",
+        "other"
+      ]
+    },
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "count",
+        "occupancy_bps",
+        "candidate_ids"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/kind"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occupancy_bps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000,
+          "description": "10000 bps = 100% per risorsa selezionata."
+        },
+        "candidate_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/label"
+          }
+        }
+      }
+    }
+  }
+}

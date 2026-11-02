@@ -1,0 +1,22 @@
+# Changelog
+
+## Non rilasciato — assistente conversazionale (ramo feat/cliente-assistente-chat-v2)
+
+Pannello **Assistente** in ogni vista della Control Room, con conversazione,
+suggerimenti per vista e proposte applicabili come simulazioni verificate.
+Nuove analisi per digest: percorso critico per commessa (`/api/explain`),
+saturazione giornaliera da calendario (`/api/loads`), KPI di qualità
+(`/api/quality`). L'assistente AI ha 12 strumenti di lettura con argomenti,
+storico di 10 turni e lo strumento `propose_simulation`; senza AI le
+risposte restano deterministiche. Piano e verifiche:
+[docs/piano-assistente-chat-v2.md](docs/piano-assistente-chat-v2.md).
+
+## 0.2.0 — 2026-10-18
+
+Motore nuovo di pianificazione a capacità finita, calendari UTC/locali, bundle simultanei, nesting multipli, precedenze FS/SS, modalità per operazione, inizi fissi, storico e diagnosi. Aggiunti audit indipendente, contratti JSON e schemi, CLI, API locale, SQLite, simulazioni, adapter Factory in lettura, report e suite di test.
+
+Il profilo nuovo è documentato esplicitamente e non certifica parità con il legacy.
+
+## 0.1.0 — 2026-10-18
+
+Struttura iniziale del progetto e configurazione CI.

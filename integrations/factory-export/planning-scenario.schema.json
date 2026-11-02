@@ -1,0 +1,1522 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://intesi.it/planning-factory/planning-scenario.schema.json",
+ "title": "Planning Factory - scenario di pianificazione",
+ "description": "Schema dedotto dagli scenari estratti da Factory (vedi prd/10-contratto-scenario.md). Le collezioni nuove (setupTransitions, resourceStates, technicalParameters, frozenWindows) sono facoltative.",
+ "type": "object",
+ "required": [
+  "schemaVersion",
+  "scenarioId",
+  "source",
+  "planning",
+  "universe",
+  "operations",
+  "lots",
+  "orders",
+  "operationResources",
+  "precedences"
+ ],
+ "properties": {
+  "schemaVersion": {
+   "type": "string",
+   "const": "1.0"
+  },
+  "scenarioId": {
+   "type": "string"
+  },
+  "source": {
+   "type": "object",
+   "required": [
+    "system",
+    "database",
+    "capturedAt"
+   ]
+  },
+  "planning": {
+   "type": "object",
+   "required": [
+    "start",
+    "horizonDays",
+    "timeZone"
+   ],
+   "properties": {
+    "start": {
+     "type": "string",
+     "format": "date-time"
+    },
+    "horizonDays": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "timeZone": {
+     "type": "string"
+    }
+   }
+  },
+  "universe": {
+   "type": "object"
+  },
+  "calendarModels": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "cycleDays": {
+      "type": "integer"
+     },
+     "cycleKind": {
+      "type": "string"
+     },
+     "cycleStartDate": {
+      "type": "string"
+     },
+     "modelId": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "calendarModelDays": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "dayIndex": {
+      "type": "integer"
+     },
+     "dayTypeId": {
+      "type": "integer"
+     },
+     "dayTypeName": {
+      "type": "string"
+     },
+     "modelId": {
+      "type": "integer"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "dayTypeIntervals": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "crossesMidnight": {
+      "type": "integer"
+     },
+     "dayTypeId": {
+      "type": "integer"
+     },
+     "endSec": {
+      "type": "integer"
+     },
+     "startSec": {
+      "type": "integer"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "holidays": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "date": {
+      "type": "string"
+     },
+     "modelId": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     },
+     "recurrence": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "calendarAssignments": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "calendarId": {
+      "type": "integer"
+     },
+     "modelId": {
+      "type": "integer"
+     },
+     "validFrom": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "calendarPeriods": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "calendarId": {
+      "type": "integer"
+     },
+     "fromDate": {
+      "type": "string"
+     },
+     "modelId": {
+      "type": "integer"
+     },
+     "seq": {
+      "type": "integer"
+     },
+     "toDate": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "calendarExceptions": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": true
+   }
+  },
+  "operatorAbsences": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "approved": {
+      "type": "integer"
+     },
+     "date": {
+      "type": "string"
+     },
+     "endSec": {
+      "type": "integer"
+     },
+     "operatorCode": {
+      "type": "string"
+     },
+     "reasonCode": {
+      "type": "integer"
+     },
+     "startSec": {
+      "type": "integer"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "machines": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "bonusTimeSec": {
+      "type": "integer"
+     },
+     "calendarId": {
+      "type": "integer"
+     },
+     "code": {
+      "type": "string"
+     },
+     "costCenter": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "costPerHour": {
+      "type": "number"
+     },
+     "currentSetupClassId": {
+      "type": "null"
+     },
+     "groupId": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "inefficiencyPct": {
+      "type": "integer"
+     },
+     "isWorkCenter": {
+      "type": "integer"
+     },
+     "machineTypeId": {
+      "type": "null"
+     },
+     "maxSizeX": {
+      "type": "null"
+     },
+     "maxSizeY": {
+      "type": "null"
+     },
+     "maxUtilizationPct": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     },
+     "priority": {
+      "type": "integer"
+     },
+     "statusCode": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "operators": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "bonusTimeSec": {
+      "type": "integer"
+     },
+     "calendarId": {
+      "type": "integer"
+     },
+     "code": {
+      "type": "string"
+     },
+     "costPerHour": {
+      "type": "number"
+     },
+     "groupCode": {
+      "type": "string"
+     },
+     "inefficiencyPct": {
+      "type": "integer"
+     },
+     "maxUtilizationPct": {
+      "type": "number"
+     },
+     "name": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "partTimePct": {
+      "type": [
+       "null",
+       "number"
+      ]
+     },
+     "priority": {
+      "type": "integer"
+     },
+     "setupCapable": {
+      "type": "integer"
+     },
+     "statusCode": {
+      "type": "integer"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "suppliers": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "calendarId": {
+      "type": "integer"
+     },
+     "code": {
+      "type": "string"
+     },
+     "deliveryRuleData": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "deliveryRuleRefDate": {
+      "type": "null"
+     },
+     "deliveryRuleType": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "leadTime": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "leadTimeType": {
+      "type": "null"
+     },
+     "name": {
+      "type": "string"
+     },
+     "obsolete": {
+      "type": "boolean"
+     },
+     "supplierId": {
+      "type": "integer"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "tools": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "activeFrom": {
+      "type": "null"
+     },
+     "activeTo": {
+      "type": "null"
+     },
+     "calendarId": {
+      "type": "integer"
+     },
+     "code": {
+      "type": "integer"
+     },
+     "loadTimeSec": {
+      "type": "null"
+     },
+     "maxLoadKg": {
+      "type": "number"
+     },
+     "name": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "operatorUsagePct": {
+      "type": "null"
+     },
+     "operatorsRequired": {
+      "type": "null"
+     },
+     "sizeX": {
+      "type": "number"
+     },
+     "sizeY": {
+      "type": "number"
+     },
+     "sizeZ": {
+      "type": "number"
+     },
+     "toolTypeId": {
+      "type": "integer"
+     },
+     "toolTypeName": {
+      "type": "string"
+     },
+     "unloadTimeSec": {
+      "type": "null"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "pallets": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": true
+   }
+  },
+  "palletMachines": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": true
+   }
+  },
+  "departments": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "code": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "shortName": {
+      "type": [
+       "null",
+       "string"
+      ]
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "departmentMembers": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "departmentCode": {
+      "type": "string"
+     },
+     "resourceCode": {
+      "type": "string"
+     },
+     "resourceKind": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "phaseTypes": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "groupedHandling": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "phaseTypeId": {
+      "type": "integer"
+     },
+     "sortOrder": {
+      "type": "integer"
+     },
+     "visible": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "capabilities": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "automatic": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "bonusTimeSec": {
+      "type": "integer"
+     },
+     "calendarId": {
+      "type": "integer"
+     },
+     "calendarModelId": {
+      "type": "null"
+     },
+     "costPerHour": {
+      "type": "number"
+     },
+     "inefficiencyPct": {
+      "type": "integer"
+     },
+     "phaseTypeId": {
+      "type": "integer"
+     },
+     "priority": {
+      "type": "integer"
+     },
+     "resourceCode": {
+      "type": "string"
+     },
+     "resourceKind": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "customers": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "classId": {
+      "type": "null"
+     },
+     "className": {
+      "type": "null"
+     },
+     "classPriority": {
+      "type": "integer"
+     },
+     "code": {
+      "type": "string"
+     },
+     "customerId": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     },
+     "priority": {
+      "type": "integer"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "orders": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "code": {
+      "type": "string"
+     },
+     "customerCode": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "description": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "dueDate": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "dueTime": {
+      "type": "null"
+     },
+     "fixedStartAt": {
+      "type": "null"
+     },
+     "fixedStartFlag": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "issueDate": {
+      "type": "string"
+     },
+     "orderId": {
+      "type": "integer"
+     },
+     "orderKind": {
+      "type": "string"
+     },
+     "orderTypeId": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "plannedEndDate": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "plannedEndTime": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "plannedStartDate": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "plannedStartTime": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "planningModeSaved": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "reference": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "statusCode": {
+      "type": "integer"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "orderLines": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "deliveryStatusCode": {
+      "type": "integer"
+     },
+     "dueDate": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "finalLotId": {
+      "type": "integer"
+     },
+     "fixedStartAt": {
+      "type": "null"
+     },
+     "fixedStartFlag": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "lineNumber": {
+      "type": "integer"
+     },
+     "orderId": {
+      "type": "integer"
+     },
+     "partCode": {
+      "type": "string"
+     },
+     "partDescription": {
+      "type": "string"
+     },
+     "priority": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "qtyDelivered": {
+      "type": "number"
+     },
+     "qtyOrdered": {
+      "type": "number"
+     },
+     "requestedDate": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "uom": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "lots": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "dimX": {
+      "type": [
+       "null",
+       "number"
+      ]
+     },
+     "dimY": {
+      "type": [
+       "null",
+       "number"
+      ]
+     },
+     "dimZ": {
+      "type": [
+       "null",
+       "number"
+      ]
+     },
+     "dueDate": {
+      "type": "null"
+     },
+     "dueTime": {
+      "type": "null"
+     },
+     "familyCode": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "finalLotId": {
+      "type": "integer"
+     },
+     "fixedStartAt": {
+      "type": "null"
+     },
+     "fixedStartFlag": {
+      "type": "integer"
+     },
+     "linkedLotId": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "lotId": {
+      "type": "integer"
+     },
+     "materialCode": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "materialMissing": {
+      "type": "integer"
+     },
+     "orderId": {
+      "type": "integer"
+     },
+     "parentLotId": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "partCode": {
+      "type": "string"
+     },
+     "partDescription": {
+      "type": "string"
+     },
+     "partTypeId": {
+      "type": "null"
+     },
+     "plannedEndDate": {
+      "type": "string"
+     },
+     "plannedEndTime": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "plannedStartDate": {
+      "type": "string"
+     },
+     "plannedStartTime": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "priority": {
+      "type": "integer"
+     },
+     "productionCritical": {
+      "type": "integer"
+     },
+     "qty": {
+      "type": "number"
+     },
+     "statusCode": {
+      "type": "integer"
+     },
+     "uom": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "operations": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "activationCode": {
+      "type": "string"
+     },
+     "actualSetupMachineSec": {
+      "type": [
+       "null",
+       "number"
+      ]
+     },
+     "actualSetupOperatorSec": {
+      "type": [
+       "null",
+       "number"
+      ]
+     },
+     "actualWorkMachineSec": {
+      "type": [
+       "null",
+       "number"
+      ]
+     },
+     "actualWorkOperatorSec": {
+      "type": [
+       "null",
+       "number"
+      ]
+     },
+     "currentMachineCode": {
+      "type": "null"
+     },
+     "currentOperatorCode": {
+      "type": "null"
+     },
+     "depositEnabled": {
+      "type": "string"
+     },
+     "description": {
+      "type": "string"
+     },
+     "executionCode": {
+      "type": "string"
+     },
+     "finiteEnd": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "finiteStart": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "fixedStartAt": {
+      "type": "null"
+     },
+     "fixedStartFlag": {
+      "type": "integer"
+     },
+     "infiniteEnd": {
+      "type": "null"
+     },
+     "infiniteStart": {
+      "type": "null"
+     },
+     "keepResourcesCode": {
+      "type": "integer"
+     },
+     "legacyDueDate": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "lotId": {
+      "type": "integer"
+     },
+     "operationId": {
+      "type": "integer"
+     },
+     "orderId": {
+      "type": "integer"
+     },
+     "overlapPct": {
+      "type": "number"
+     },
+     "phaseCode": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "phaseId": {
+      "type": "integer"
+     },
+     "phaseTypeId": {
+      "type": "integer"
+     },
+     "plannedEndDate": {
+      "type": "string"
+     },
+     "plannedEndTime": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "plannedStartDate": {
+      "type": "string"
+     },
+     "plannedStartTime": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "priority": {
+      "type": "integer"
+     },
+     "priorityDurationDivisor": {
+      "type": "number"
+     },
+     "producedQty": {
+      "type": [
+       "null",
+       "number"
+      ]
+     },
+     "qty": {
+      "type": "number"
+     },
+     "queueTimeSec": {
+      "type": "number"
+     },
+     "runMachinePct": {
+      "type": "number"
+     },
+     "runMachines": {
+      "type": "integer"
+     },
+     "runOperatorPct": {
+      "type": "number"
+     },
+     "runOperators": {
+      "type": "integer"
+     },
+     "savedTotalSec": {
+      "type": "integer"
+     },
+     "sequence": {
+      "type": "integer"
+     },
+     "setupClassGroup": {
+      "type": "integer"
+     },
+     "setupClassId": {
+      "type": "null"
+     },
+     "setupClassValue": {
+      "type": [
+       "null",
+       "number"
+      ]
+     },
+     "setupMachinePct": {
+      "type": "number"
+     },
+     "setupMachines": {
+      "type": "integer"
+     },
+     "setupOperatorPct": {
+      "type": "number"
+     },
+     "setupOperators": {
+      "type": "integer"
+     },
+     "setupSec": {
+      "type": "integer"
+     },
+     "sourceLastUpdate": {
+      "type": "string"
+     },
+     "splitMaxFractions": {
+      "type": "integer"
+     },
+     "splitMinDurationSec": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "statusCode": {
+      "type": "integer"
+     },
+     "theoreticalTotalSec": {
+      "type": "number"
+     },
+     "toPlan": {
+      "type": "string"
+     },
+     "unitSec": {
+      "type": "number"
+     },
+     "workOrderCode": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "workOrderType": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "workplanId": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "operationResources": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "allocationPct": {
+      "type": "number"
+     },
+     "assignmentId": {
+      "type": "integer"
+     },
+     "assignmentRule": {
+      "type": "string"
+     },
+     "bonusTimeSec": {
+      "type": "integer"
+     },
+     "calendarId": {
+      "type": "null"
+     },
+     "calendarModelId": {
+      "type": "null"
+     },
+     "inefficiencyPct": {
+      "type": "integer"
+     },
+     "operationId": {
+      "type": "integer"
+     },
+     "preferential": {
+      "type": "boolean"
+     },
+     "priority": {
+      "type": "integer"
+     },
+     "resourceCode": {
+      "type": "string"
+     },
+     "resourceKind": {
+      "type": "string"
+     },
+     "savedBlockId": {
+      "type": "integer"
+     },
+     "setupCapable": {
+      "type": "integer"
+     },
+     "usagePct": {
+      "type": "number"
+     },
+     "usedInSavedPlan": {
+      "type": "integer"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "savedPlanBlocks": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "blockId": {
+      "type": "integer"
+     },
+     "endAt": {
+      "type": "string"
+     },
+     "fractionId": {
+      "type": "integer"
+     },
+     "intervalId": {
+      "type": "integer"
+     },
+     "operationId": {
+      "type": "integer"
+     },
+     "startAt": {
+      "type": "string"
+     },
+     "usagePct": {
+      "type": "number"
+     },
+     "workplanId": {
+      "type": "null"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "operationTools": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "loadTimeSec": {
+      "type": "null"
+     },
+     "machineCode": {
+      "type": "null"
+     },
+     "operationId": {
+      "type": "integer"
+     },
+     "operatorUsagePct": {
+      "type": "null"
+     },
+     "operatorsRequired": {
+      "type": "null"
+     },
+     "programNumber": {
+      "type": "null"
+     },
+     "qty": {
+      "type": "null"
+     },
+     "savedBlockId": {
+      "type": "null"
+     },
+     "toolAssignmentId": {
+      "type": "integer"
+     },
+     "toolCode": {
+      "type": "integer"
+     },
+     "toolTypeId": {
+      "type": "integer"
+     },
+     "unloadTimeSec": {
+      "type": "null"
+     },
+     "workTimeSec": {
+      "type": "null"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "explicitLinks": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": true
+   }
+  },
+  "materialArrivals": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "availableDate": {
+      "type": "string"
+     },
+     "lotId": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "orderId": {
+      "type": "integer"
+     },
+     "partCode": {
+      "type": "string"
+     },
+     "purchaseOrderCode": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "qty": {
+      "type": "number"
+     },
+     "requestType": {
+      "type": "integer"
+     },
+     "source": {
+      "type": "string"
+     },
+     "supplierCode": {
+      "type": [
+       "null",
+       "string"
+      ]
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "subcontractOrders": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "issueDate": {
+      "type": "string"
+     },
+     "operationId": {
+      "type": "integer"
+     },
+     "orderStatusCode": {
+      "type": "integer"
+     },
+     "promisedDate": {
+      "type": "string"
+     },
+     "purchaseOrderCode": {
+      "type": "string"
+     },
+     "purchaseOrderId": {
+      "type": "integer"
+     },
+     "qty": {
+      "type": "number"
+     },
+     "rowNo": {
+      "type": "integer"
+     },
+     "rowStatusCode": {
+      "type": "integer"
+     },
+     "supplierCode": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "lotComponents": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "componentNo": {
+      "type": "integer"
+     },
+     "description": {
+      "type": "string"
+     },
+     "lineNumber": {
+      "type": "integer"
+     },
+     "lotId": {
+      "type": "integer"
+     },
+     "materialCode": {
+      "type": "string"
+     },
+     "orderId": {
+      "type": "integer"
+     },
+     "partCode": {
+      "type": "string"
+     },
+     "phaseTypeId": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "qtyCommitted": {
+      "type": "number"
+     },
+     "qtyRequired": {
+      "type": "number"
+     },
+     "supplyKind": {
+      "type": "string"
+     },
+     "uom": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "workplans": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "code": {
+      "type": "string"
+     },
+     "description": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string"
+     },
+     "machineCode": {
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "phaseTypeId": {
+      "type": "integer"
+     },
+     "plannedDate": {
+      "type": "null"
+     },
+     "statusCode": {
+      "type": "integer"
+     },
+     "toolCode": {
+      "type": "null"
+     },
+     "toolTypeId": {
+      "type": "null"
+     },
+     "workOrderCode": {
+      "type": "string"
+     },
+     "workplanId": {
+      "type": "integer"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "workplanQuantities": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "operationId": {
+      "type": "integer"
+     },
+     "qty": {
+      "type": "number"
+     },
+     "rowType": {
+      "type": "integer"
+     },
+     "setupSec": {
+      "type": "number"
+     },
+     "unitSec": {
+      "type": "number"
+     },
+     "workplanId": {
+      "type": "integer"
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "setupClasses": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "groupCode": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "legacyPerac": {
+      "type": "number"
+     },
+     "legacyTmsgl": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     },
+     "note": {
+      "type": "string"
+     },
+     "setupClassId": {
+      "type": "integer"
+     },
+     "value": {
+      "type": [
+       "null",
+       "number"
+      ]
+     }
+    },
+    "additionalProperties": true
+   }
+  },
+  "setupClassParameters": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": true
+   }
+  },
+  "precedences": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "lagSec": {
+      "type": "number"
+     },
+     "linkType": {
+      "type": "string"
+     },
+     "overlapPct": {
+      "type": "number"
+     },
+     "predecessorOperationId": {
+      "type": "integer"
+     },
+     "source": {
+      "type": "string"
+     },
+     "successorOperationId": {
+      "type": "integer"
+     }
+    },
+    "additionalProperties": true
+   }
+  }
+ }
+}

@@ -1,0 +1,121 @@
+"""Bounded setup sequence search: true phase-specific setup and full audit."""
+import json
+import unittest
+from planning_factory.domain.models import Dependency, Nesting, Resource
+from planning_factory.domain.validation import ValidationError
+from planning_factory.domain.setup_contract import load_setup_contract
+from planning_factory.engine.setup_stage_scheduler import schedule_setup_stages
+from planning_factory.engine.setup_sequence_search import (
+    optimize_setup_sequence, sequence_metrics,
+)
+from planning_factory.engine.setup_capacity import audit_stage_capacity
+from planning_factory.engine.verification import verify_plan
+from .test_setup_stage_scheduler import base, spec
+from .helpers import dt, op, scenario
+
+
+def three():
+    data = spec()
+    data['phases'][1]['target_state'] = 'RED'
+    extra = dict(data['phases'][0], id='job:c')
+    data['phases'].append(extra)
+    return load_setup_contract(json.dumps(data))
+
+
+class SetupSequenceSearchTests(unittest.TestCase):
+    def test_fewer_machine_setups_without_changing_baseline(self):
+        s = base([op('a'), op('b'), op('c')])
+        c = three()
+        search = optimize_setup_sequence(s, c, ('job:a', 'job:b', 'job:c'),
+                                         objective='setup', max_evaluations=12)
+        self.assertTrue(search.improved)
+        self.assertEqual(search.baseline.setup_seconds, 5400)
+        self.assertEqual(search.selected.setup_seconds, 1800)
+        self.assertEqual(search.sequence, ('job:b', 'job:a', 'job:c'))
+        self.assertEqual(verify_plan(search.winner.scenario, search.winner.plan), ())
+        self.assertEqual(audit_stage_capacity(c, s, search.sequence,
+                                              search.winner.bookings), ())
+        self.assertEqual(search, optimize_setup_sequence(
+            s, c, ('job:a', 'job:b', 'job:c'), objective='setup',
+            max_evaluations=12))
+
+    def test_budget_one_retains_initial_solution(self):
+        s = base([op('a'), op('b'), op('c')])
+        result = optimize_setup_sequence(s, three(), ('job:a', 'job:b', 'job:c'),
+                                         objective='delivery', max_evaluations=1)
+        self.assertFalse(result.improved)
+        self.assertEqual(result.evaluated, 1)
+        self.assertEqual(result.sequence, ('job:a', 'job:b', 'job:c'))
+
+    def test_forbidden_reorder_rejected_not_returned(self):
+        # B depends on A, so moving B before A creates a cycle
+        # with the required per-machine order, and is rejected.
+        s = base([op('a'), op('b', predecessors=(Dependency('a', 'FS'),))])
+        data = spec()
+        c = load_setup_contract(json.dumps(data))
+        result = optimize_setup_sequence(s, c, ('job:a', 'job:b'),
+                                         objective='setup', max_evaluations=8)
+        self.assertEqual(result.sequence, ('job:a', 'job:b'))
+        self.assertEqual(result.rejected, 1)
+        self.assertEqual(result.evaluated, 2)
+
+    def test_rejects_ambiguous_objectives_and_noninteger_budget(self):
+        s = base([op('a'), op('b')])
+        c = load_setup_contract(json.dumps(spec()))
+        for invalid in ('weighted', '', 'optimal'):
+            with self.assertRaises(ValueError):
+                optimize_setup_sequence(s, c, ('job:a', 'job:b'),
+                                        objective=invalid)
+        with self.assertRaises(ValueError):
+            optimize_setup_sequence(s, c, ('job:a', 'job:b'),
+                                    objective='setup', max_evaluations=True)
+
+    def test_interleaved_machines_do_not_change_unrelated_dispatch(self):
+        data = spec()
+        data['resources'].append({'id': 'm2', 'kind': 'machine'})
+        data['initial_machine_states']['m2'] = 'RED'
+        data['phases'][1]['machine_id'] = 'm2'
+        data['phases'][1]['setup_requirements'][0]['candidate_ids'] = ['m2']
+        data['phases'][1]['run_requirements'][0]['candidate_ids'] = ['m2']
+        data['phases'].append(dict(data['phases'][0], id='job:c'))
+        s = scenario([op('a'), op('b', resource='m2'), op('c')],
+                     resources=(Resource('m', 'work'), Resource('m2', 'work'),
+                                Resource('op', 'work', kind='operator'),
+                                Resource('tool', 'work', kind='tool')))
+        c = load_setup_contract(json.dumps(data))
+        first = schedule_setup_stages(s, c, ('job:a', 'job:b', 'job:c'))
+        other = schedule_setup_stages(s, c, ('job:b', 'job:a', 'job:c'))
+        normalize = lambda result: {
+            (x.phase_id, x.stage): (x.segments, x.allocations)
+            for x in result.bookings}
+        self.assertEqual(normalize(first), normalize(other))
+        self.assertEqual(sequence_metrics(s, first), sequence_metrics(s, other))
+
+    def test_empty_scenario_has_zero_kpis_and_no_search_failure(self):
+        s = scenario([])
+        contract = load_setup_contract(json.dumps({
+            'schema_version': 1, 'resources': [],
+            'initial_machine_states': {}, 'phases': []}))
+        result = optimize_setup_sequence(s, contract, (), objective='delivery')
+        self.assertEqual(result.baseline.as_dict(), dict(
+            late_orders=0, tardiness_seconds=0, setup_seconds=0, makespan_seconds=0))
+        self.assertEqual(result.sequence, ())
+        self.assertEqual(result.evaluated, 1)
+
+    def test_nesting_counts_all_original_order_owners(self):
+        data = spec()
+        data['phases'] = [dict(data['phases'][0], id='nest:shared')]
+        s = base([op('a', order_id='A', due=dt(hour=8, minute=40)),
+                  op('b', order_id='B', due=dt(hour=13))],
+                 nestings=(Nesting('shared', ('a', 'b'), 3600),))
+        c = load_setup_contract(json.dumps(data))
+        search = optimize_setup_sequence(s, c, ('nest:shared',),
+                                         objective='delivery', max_evaluations=8)
+        measured = sequence_metrics(s, search.winner)
+        self.assertEqual(measured.late_orders, 1)
+        self.assertEqual(measured.setup_seconds, 1800)
+        self.assertEqual(search.evaluated, 1)
+
+
+if __name__ == '__main__':
+    unittest.main()

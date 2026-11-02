@@ -1,0 +1,894 @@
+{
+  "$defs": {
+    "Alternative": {
+      "additionalProperties": false,
+      "properties": {
+        "demands": {
+          "items": {
+            "$ref": "#/$defs/Demand"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "demands"
+      ],
+      "type": "object"
+    },
+    "Assignment": {
+      "additionalProperties": false,
+      "properties": {
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "demands": {
+          "items": {
+            "$ref": "#/$defs/Demand"
+          },
+          "type": "array"
+        },
+        "effective_mode": {
+          "type": "string"
+        },
+        "explanation": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "external_end": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fixed": {
+          "type": "boolean"
+        },
+        "operation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requested_mode": {
+          "type": "string"
+        },
+        "segments": {
+          "items": {
+            "$ref": "#/$defs/Interval"
+          },
+          "type": "array"
+        },
+        "task_id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "operation_ids",
+        "segments",
+        "demands",
+        "requested_mode",
+        "effective_mode"
+      ],
+      "type": "object"
+    },
+    "Calendar": {
+      "additionalProperties": false,
+      "properties": {
+        "closures": {
+          "items": {
+            "$ref": "#/$defs/Interval"
+          },
+          "type": "array"
+        },
+        "exceptions": {
+          "items": {
+            "$ref": "#/$defs/CalendarException"
+          },
+          "type": "array"
+        },
+        "holidays": {
+          "items": {
+            "format": "date",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "shifts": {
+          "items": {
+            "$ref": "#/$defs/Shift"
+          },
+          "type": "array"
+        },
+        "timezone": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "timezone",
+        "shifts"
+      ],
+      "type": "object"
+    },
+    "CalendarException": {
+      "additionalProperties": false,
+      "properties": {
+        "day": {
+          "format": "date",
+          "type": "string"
+        },
+        "shifts": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d(:00)?$",
+                "type": "string"
+              },
+              {
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d(:00)?$",
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "day"
+      ],
+      "type": "object"
+    },
+    "Demand": {
+      "additionalProperties": false,
+      "properties": {
+        "resource_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "units": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "resource_id"
+      ],
+      "type": "object"
+    },
+    "Dependency": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "FS",
+            "SS"
+          ]
+        },
+        "lag_seconds": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_lag_seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "predecessor_id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "predecessor_id"
+      ],
+      "type": "object"
+    },
+    "Edge": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "lag_seconds": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "predecessor": {
+          "type": "string"
+        },
+        "successor": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "predecessor",
+        "successor",
+        "kind",
+        "lag_seconds"
+      ],
+      "type": "object"
+    },
+    "Interval": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "start": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "type": "object"
+    },
+    "Nesting": {
+      "additionalProperties": false,
+      "properties": {
+        "duration_seconds": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "operation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "setup_seconds": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "operation_ids",
+        "duration_seconds"
+      ],
+      "type": "object"
+    },
+    "Operation": {
+      "additionalProperties": false,
+      "properties": {
+        "alternatives": {
+          "items": {
+            "$ref": "#/$defs/Alternative"
+          },
+          "type": "array"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "customer_priority": {
+          "type": "integer"
+        },
+        "due": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "duration_seconds": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "external_end": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fixed_alternative": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fixed_start": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "forward",
+                "backward",
+                "auto"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "order_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "phase_priority": {
+          "type": "integer"
+        },
+        "predecessors": {
+          "items": {
+            "$ref": "#/$defs/Dependency"
+          },
+          "type": "array"
+        },
+        "preferred_alternative": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "release": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "setup_seconds": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "splittable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "order_id",
+        "duration_seconds",
+        "alternatives"
+      ],
+      "type": "object"
+    },
+    "OrderResult": {
+      "additionalProperties": false,
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "due": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "end": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "order_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "tardiness_seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "order_id",
+        "end",
+        "due",
+        "tardiness_seconds",
+        "complete"
+      ],
+      "type": "object"
+    },
+    "Plan": {
+      "additionalProperties": false,
+      "properties": {
+        "assignments": {
+          "items": {
+            "$ref": "#/$defs/Assignment"
+          },
+          "type": "array"
+        },
+        "engine_version": {
+          "type": "string"
+        },
+        "orders": {
+          "items": {
+            "$ref": "#/$defs/OrderResult"
+          },
+          "type": "array"
+        },
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/ResourceLoad"
+          },
+          "type": "array"
+        },
+        "scenario_digest": {
+          "type": "string"
+        },
+        "scenario_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "unscheduled": {
+          "items": {
+            "$ref": "#/$defs/Unscheduled"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "scenario_id",
+        "scenario_digest",
+        "assignments",
+        "unscheduled",
+        "resources",
+        "orders",
+        "schema_version"
+      ],
+      "type": "object"
+    },
+    "Resource": {
+      "additionalProperties": false,
+      "properties": {
+        "calendar_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "capacity": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "efficiency_bp": {
+          "type": "integer"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "calendar_id"
+      ],
+      "type": "object"
+    },
+    "ResourceLoad": {
+      "additionalProperties": false,
+      "properties": {
+        "available_unit_seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "booked_unit_seconds": {
+          "type": "integer"
+        },
+        "resource_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "utilization": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "resource_id",
+        "available_unit_seconds",
+        "booked_unit_seconds",
+        "utilization"
+      ],
+      "type": "object"
+    },
+    "Scenario": {
+      "additionalProperties": false,
+      "properties": {
+        "calendars": {
+          "items": {
+            "$ref": "#/$defs/Calendar"
+          },
+          "type": "array"
+        },
+        "end": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "nestings": {
+          "items": {
+            "$ref": "#/$defs/Nesting"
+          },
+          "type": "array"
+        },
+        "operations": {
+          "items": {
+            "$ref": "#/$defs/Operation"
+          },
+          "type": "array"
+        },
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/Resource"
+          },
+          "type": "array"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "settings": {
+          "$ref": "#/$defs/Settings"
+        },
+        "start": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "calendars",
+        "resources",
+        "operations",
+        "schema_version"
+      ],
+      "type": "object"
+    },
+    "Settings": {
+      "additionalProperties": false,
+      "properties": {
+        "alternative_switch_min_gain_seconds": {
+          "type": "integer"
+        },
+        "auto_backward_days": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "auto_rule": {
+          "enum": [
+            "due_distance",
+            "slack"
+          ]
+        },
+        "auto_slack_seconds": {
+          "type": "integer"
+        },
+        "customer_weight": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "due_weight": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mode": {
+          "enum": [
+            "forward",
+            "backward",
+            "auto"
+          ]
+        },
+        "priority_weight": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "Shift": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d(:00)?$",
+          "type": "string"
+        },
+        "start": {
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d(:00)?$",
+          "type": "string"
+        },
+        "weekday": {
+          "maximum": 6,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "weekday",
+        "start",
+        "end"
+      ],
+      "type": "object"
+    },
+    "Task": {
+      "additionalProperties": false,
+      "properties": {
+        "alternatives": {
+          "items": {
+            "$ref": "#/$defs/Alternative"
+          },
+          "type": "array"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "customer_priority": {
+          "type": "integer"
+        },
+        "due": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "duration_seconds": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "external_end": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fixed_alternative": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fixed_start": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "forward",
+            "backward",
+            "auto"
+          ]
+        },
+        "operation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "phase_priority": {
+          "type": "integer"
+        },
+        "preferred_bundle": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Demand"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "release": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "splittable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "operation_ids",
+        "duration_seconds",
+        "alternatives",
+        "release",
+        "due",
+        "priority",
+        "customer_priority",
+        "phase_priority",
+        "mode",
+        "splittable",
+        "fixed_start",
+        "fixed_alternative",
+        "completed_at"
+      ],
+      "type": "object"
+    },
+    "Unscheduled": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "operation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "task_id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "operation_ids",
+        "code",
+        "detail"
+      ],
+      "type": "object"
+    }
+  },
+  "$ref": "#/$defs/Scenario",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Planning Factory Scenario v1"
+}

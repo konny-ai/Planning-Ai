@@ -1,0 +1,6 @@
+{
+  "command": ["C:\\Program Files\\PowerShell\\7\\pwsh.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+              "C:\\INTESI\\WORK\\planning-factory\\integrations\\cliente-export\\run_cliente_locale.ps1", "-Start", "{start}"],
+  "cwd": "C:\\INTESI\\WORK\\planning-factory",
+  "timeout_seconds": 1800
+}

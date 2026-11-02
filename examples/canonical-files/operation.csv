@@ -1,0 +1,9 @@
+id,order_id,duration_seconds,setup_seconds,due,release,priority,customer_priority,phase_priority,mode,splittable
+ord-a/materiale,A,0,0,,,0,0,0,,false
+ord-a/taglio,A,5400,0,2026-10-22T15:00:00Z,,0,0,0,,false
+ord-b/taglio,B,7200,0,2026-10-22T15:00:00Z,2026-10-19T07:00:00Z,0,0,0,,false
+ord-a/piega,A,7200,0,2026-10-22T15:00:00Z,,0,0,0,,false
+ord-b/piega,B,3600,0,2026-10-22T15:00:00Z,,0,0,0,,false
+ord-a/saldatura,A,18000,1800,2026-10-22T15:00:00Z,,0,0,0,,true
+ord-a/verniciatura,A,14400,0,2026-10-22T15:00:00Z,,0,0,0,backward,false
+ord-c/urgente,C,3600,0,2026-10-22T15:00:00Z,,0,0,0,,false

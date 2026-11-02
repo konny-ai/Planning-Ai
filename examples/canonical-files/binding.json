@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "installation": "esempio-officina",
+  "scenario": {
+    "id": "officina-demo",
+    "start": "2026-10-19T00:00:00Z",
+    "end": "2026-10-26T00:00:00Z"
+  },
+  "sources": {
+    "files": {
+      "connector": "file",
+      "options": {
+        "path": ".",
+        "tables": {
+          "calendar": "calendar.csv",
+          "calendar_closure": "calendar_closure.csv",
+          "calendar_shift": "calendar_shift.csv",
+          "nest": "nest.csv",
+          "nest_member": "nest_member.csv",
+          "operation": "operation.csv",
+          "operation_demand": "operation_demand.csv",
+          "operation_dependency": "operation_dependency.csv",
+          "operation_state": "operation_state.csv",
+          "order": "order.csv",
+          "profile": "profile.csv",
+          "resource": "resource.csv"
+        }
+      }
+    }
+  },
+  "domains": {
+    "resources": {
+      "sources": [
+        "files"
+      ]
+    },
+    "calendars": {
+      "sources": [
+        "files"
+      ]
+    },
+    "orders": {
+      "sources": [
+        "files"
+      ]
+    },
+    "routings": {
+      "sources": [
+        "files"
+      ]
+    },
+    "nesting": {
+      "sources": [
+        "files"
+      ]
+    },
+    "progress": {
+      "sources": [
+        "files"
+      ]
+    },
+    "rules": {
+      "sources": [
+        "files"
+      ]
+    }
+  }
+}

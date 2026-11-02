@@ -1,0 +1,6 @@
+operation_id,predecessor_id,kind,lag_seconds
+ord-a/taglio,ord-a/materiale,FS,0
+ord-a/piega,ord-a/taglio,FS,0
+ord-b/piega,ord-b/taglio,FS,0
+ord-a/saldatura,ord-a/piega,FS,0
+ord-a/verniciatura,ord-a/saldatura,FS,3600

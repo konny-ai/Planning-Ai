@@ -1,0 +1,1007 @@
+{
+  "$id": "planning-factory/canonical-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "extracted_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "records": {
+      "additionalProperties": false,
+      "properties": {
+        "allocation_rank": {
+          "description": "materials: Ordine esplicito di assegnazione del materiale (allocation_order = rank), minore prima",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "operation_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "rank": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "operation_id",
+              "rank"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "calendar": {
+          "description": "calendars: Calendario con fuso IANA",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "timezone": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "timezone"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "calendar_closure": {
+          "description": "calendars: Chiusura assoluta (fermo, manutenzione)",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "calendar_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "end": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "start": {
+                "format": "date-time",
+                "type": "string"
+              }
+            },
+            "required": [
+              "calendar_id",
+              "start",
+              "end"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "calendar_exception": {
+          "description": "calendars: Giorno con turni sostitutivi (anche nessuno)",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "calendar_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "day": {
+                "format": "date",
+                "type": "string"
+              }
+            },
+            "required": [
+              "calendar_id",
+              "day"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "calendar_exception_shift": {
+          "description": "calendars: Turno di un giorno di eccezione",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "calendar_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "day": {
+                "format": "date",
+                "type": "string"
+              },
+              "end": {
+                "pattern": "^[0-2][0-9]:[0-5][0-9](:[0-5][0-9])?$",
+                "type": "string"
+              },
+              "start": {
+                "pattern": "^[0-2][0-9]:[0-5][0-9](:[0-5][0-9])?$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "calendar_id",
+              "day",
+              "start",
+              "end"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "calendar_holiday": {
+          "description": "calendars: Giorno di chiusura",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "calendar_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "day": {
+                "format": "date",
+                "type": "string"
+              }
+            },
+            "required": [
+              "calendar_id",
+              "day"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "calendar_shift": {
+          "description": "calendars: Turno settimanale; end <= start significa giorno successivo",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "calendar_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "end": {
+                "pattern": "^[0-2][0-9]:[0-5][0-9](:[0-5][0-9])?$",
+                "type": "string"
+              },
+              "start": {
+                "pattern": "^[0-2][0-9]:[0-5][0-9](:[0-5][0-9])?$",
+                "type": "string"
+              },
+              "weekday": {
+                "maximum": 6,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "calendar_id",
+              "weekday",
+              "start",
+              "end"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "identity_map": {
+          "description": "identity: Corrispondenza esplicita fra la chiave di un sistema e la chiave canonica",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "canonical_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "external_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "map": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "map",
+              "external_id",
+              "canonical_id"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "material_need": {
+          "description": "materials: Fabbisogno di materiale di una fase",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "item_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "operation_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "quantity": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9]+(\\.[0-9]+)?$",
+                    "type": "string"
+                  },
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "operation_id",
+              "item_id",
+              "quantity"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "material_supply": {
+          "description": "materials: Disponibilità: giacenza, ordine fornitore, trasferimento o produzione; available_at null = data ignota",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "available_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "item_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "stock",
+                  "purchase_order",
+                  "transfer",
+                  "production"
+                ]
+              },
+              "quantity": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9]+(\\.[0-9]+)?$",
+                    "type": "string"
+                  },
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                ]
+              },
+              "reference": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "item_id",
+              "quantity",
+              "available_at"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "nest": {
+          "description": "nesting: Programma di taglio: una sola attività con durata condivisa; resource_id = macchina assegnata dal CAM",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "duration_seconds": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "material": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "preview": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "resource_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "setup_seconds": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "sheets": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "status": {
+                "enum": [
+                  "draft",
+                  "released",
+                  "cut"
+                ]
+              },
+              "thickness_mm": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9]+(\\.[0-9]+)?$",
+                    "type": "string"
+                  },
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                ]
+              },
+              "version": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "duration_seconds",
+              "setup_seconds"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "nest_member": {
+          "description": "nesting: Fase contenuta in un programma di taglio (quantità informativa)",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "nest_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "operation_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "quantity": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9]+(\\.[0-9]+)?$",
+                    "type": "string"
+                  },
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "nest_id",
+              "operation_id"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "operation": {
+          "description": "routings: Fase: durata residua di lavorazione e setup in secondi",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "customer_priority": {
+                "type": "integer"
+              },
+              "due": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "duration_seconds": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "material": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "mode": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "forward",
+                      "backward",
+                      "auto"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "order_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "phase_priority": {
+                "default": 0,
+                "type": "integer"
+              },
+              "preferred_alternative": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "priority": {
+                "type": "integer"
+              },
+              "quantity": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9]+(\\.[0-9]+)?$",
+                    "type": "string"
+                  },
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                ]
+              },
+              "release": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "setup_seconds": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "splittable": {
+                "default": false,
+                "type": "boolean"
+              },
+              "thickness_mm": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9]+(\\.[0-9]+)?$",
+                    "type": "string"
+                  },
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "order_id",
+              "duration_seconds",
+              "setup_seconds"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "operation_demand": {
+          "description": "routings: Risorsa richiesta da una alternativa (indice 0..n-1) di una fase",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "alternative": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "operation_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "resource_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "units": {
+                "default": 1,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "operation_id",
+              "alternative",
+              "resource_id"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "operation_dependency": {
+          "description": "routings: Precedenza FS/SS con ritardo in secondi trascorsi; max_lag_seconds = attesa massima segnalata (P6)",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "default": "FS",
+                "enum": [
+                  "FS",
+                  "SS"
+                ]
+              },
+              "lag_seconds": {
+                "default": 0,
+                "type": "integer"
+              },
+              "max_lag_seconds": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "operation_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "predecessor_id": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "operation_id",
+              "predecessor_id"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "operation_external_end": {
+          "description": "subcontract: Fine dichiarata dal fornitore di conto lavoro (non è un consuntivo)",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "external_end": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "operation_id": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "operation_id",
+              "external_end"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "operation_progress": {
+          "description": "progress: Consuntivo: fase avviata (residuo secondo residual_policy, macchina in uso) o chiusa",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "completed_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "operation_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "produced_quantity": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9]+(\\.[0-9]+)?$",
+                    "type": "string"
+                  },
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                ]
+              },
+              "recorded_setup_seconds": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "recorded_work_seconds": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "resource_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "started",
+                  "completed"
+                ]
+              }
+            },
+            "required": [
+              "operation_id",
+              "status"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "operation_state": {
+          "description": "progress: Stato di avanzamento: fase chiusa o avviata/bloccata su inizio e alternativa",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "completed_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "fixed_alternative": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "fixed_start": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "operation_id": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "operation_id"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "order": {
+          "description": "orders: Commessa; i campi valgono per le fasi che non li dichiarano",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "customer_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "customer_priority": {
+                "type": "integer"
+              },
+              "due": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "mode": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "forward",
+                      "backward",
+                      "auto"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "priority": {
+                "type": "integer"
+              },
+              "release": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "profile": {
+          "description": "rules: Profilo di calcolo (Settings del motore) con margine di consegna P3 e bonus lavori avviati P12",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "alternative_switch_min_gain_seconds": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "auto_backward_days": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "auto_rule": {
+                "enum": [
+                  "due_distance",
+                  "slack"
+                ]
+              },
+              "auto_slack_seconds": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "customer_weight": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "delivery_buffer_seconds": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "due_weight": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "mode": {
+                "enum": [
+                  "forward",
+                  "backward",
+                  "auto"
+                ]
+              },
+              "priority_weight": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "wip_priority_bonus": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "mode",
+              "auto_backward_days",
+              "priority_weight",
+              "due_weight",
+              "customer_weight"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "resource": {
+          "description": "resources: Risorsa; capacity null = infinita ma soggetta al calendario; efficiency_bp in punti base (P9)",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "calendar_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "capacity": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "efficiency_bp": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "kind": {
+                "default": "machine",
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "calendar_id",
+              "capacity"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "rule": {
+          "description": "rules: Regola con ambito confermata dal planner: add_setup_seconds, set_priority, set_customer_priority",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "add_setup_seconds",
+                  "set_priority",
+                  "set_customer_priority",
+                  "set_delivery_buffer_seconds"
+                ]
+              },
+              "confirmed_at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "confirmed_by": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "customer_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "material": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "max_thickness_mm": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9]+(\\.[0-9]+)?$",
+                    "type": "string"
+                  },
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                ]
+              },
+              "min_thickness_mm": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9]+(\\.[0-9]+)?$",
+                    "type": "string"
+                  },
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                ]
+              },
+              "note": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "order_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "profile": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "resource_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "valid_from": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "valid_to": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "value": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "action",
+              "value"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schema_version",
+    "records"
+  ],
+  "title": "Planning Factory canonical data bundle v1 (ADR 004)",
+  "type": "object"
+}

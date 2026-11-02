@@ -1,0 +1,445 @@
+{
+  "calendars": [
+    {
+      "closures": [
+        {
+          "end": "2026-10-20T08:00:00Z",
+          "start": "2026-10-20T06:00:00Z"
+        }
+      ],
+      "exceptions": [],
+      "holidays": [],
+      "id": "shop",
+      "shifts": [
+        {
+          "end": "12:00:00",
+          "start": "08:00:00",
+          "weekday": 0
+        },
+        {
+          "end": "12:00:00",
+          "start": "08:00:00",
+          "weekday": 1
+        },
+        {
+          "end": "12:00:00",
+          "start": "08:00:00",
+          "weekday": 2
+        },
+        {
+          "end": "12:00:00",
+          "start": "08:00:00",
+          "weekday": 3
+        },
+        {
+          "end": "12:00:00",
+          "start": "08:00:00",
+          "weekday": 4
+        },
+        {
+          "end": "17:00:00",
+          "start": "13:00:00",
+          "weekday": 0
+        },
+        {
+          "end": "17:00:00",
+          "start": "13:00:00",
+          "weekday": 1
+        },
+        {
+          "end": "17:00:00",
+          "start": "13:00:00",
+          "weekday": 2
+        },
+        {
+          "end": "17:00:00",
+          "start": "13:00:00",
+          "weekday": 3
+        },
+        {
+          "end": "17:00:00",
+          "start": "13:00:00",
+          "weekday": 4
+        }
+      ],
+      "timezone": "Europe/Rome"
+    },
+    {
+      "closures": [],
+      "exceptions": [],
+      "holidays": [],
+      "id": "supplier",
+      "shifts": [
+        {
+          "end": "17:00:00",
+          "start": "08:00:00",
+          "weekday": 0
+        },
+        {
+          "end": "17:00:00",
+          "start": "08:00:00",
+          "weekday": 1
+        },
+        {
+          "end": "17:00:00",
+          "start": "08:00:00",
+          "weekday": 2
+        },
+        {
+          "end": "17:00:00",
+          "start": "08:00:00",
+          "weekday": 3
+        },
+        {
+          "end": "17:00:00",
+          "start": "08:00:00",
+          "weekday": 4
+        }
+      ],
+      "timezone": "Europe/Rome"
+    }
+  ],
+  "end": "2026-10-26T00:00:00Z",
+  "id": "officina-demo",
+  "nestings": [
+    {
+      "duration_seconds": 10800,
+      "id": "NEST-001",
+      "operation_ids": [
+        "ord-a/taglio",
+        "ord-b/taglio"
+      ],
+      "setup_seconds": 1800
+    }
+  ],
+  "operations": [
+    {
+      "alternatives": [],
+      "completed_at": "2026-10-18T12:00:00Z",
+      "customer_priority": 0,
+      "due": null,
+      "duration_seconds": 0,
+      "fixed_alternative": null,
+      "fixed_start": null,
+      "id": "ord-a/materiale",
+      "mode": null,
+      "order_id": "A",
+      "phase_priority": 0,
+      "predecessors": [],
+      "priority": 0,
+      "release": null,
+      "setup_seconds": 0,
+      "splittable": false
+    },
+    {
+      "alternatives": [
+        {
+          "demands": [
+            {
+              "resource_id": "LASER-1",
+              "units": 1
+            },
+            {
+              "resource_id": "OPERATORE-1",
+              "units": 1
+            }
+          ]
+        },
+        {
+          "demands": [
+            {
+              "resource_id": "LASER-2",
+              "units": 1
+            },
+            {
+              "resource_id": "OPERATORE-1",
+              "units": 1
+            }
+          ]
+        }
+      ],
+      "completed_at": null,
+      "customer_priority": 0,
+      "due": "2026-10-22T15:00:00Z",
+      "duration_seconds": 5400,
+      "fixed_alternative": null,
+      "fixed_start": null,
+      "id": "ord-a/taglio",
+      "mode": null,
+      "order_id": "A",
+      "phase_priority": 0,
+      "predecessors": [
+        {
+          "kind": "FS",
+          "lag_seconds": 0,
+          "predecessor_id": "ord-a/materiale"
+        }
+      ],
+      "priority": 0,
+      "release": null,
+      "setup_seconds": 0,
+      "splittable": false
+    },
+    {
+      "alternatives": [
+        {
+          "demands": [
+            {
+              "resource_id": "LASER-1",
+              "units": 1
+            },
+            {
+              "resource_id": "OPERATORE-1",
+              "units": 1
+            }
+          ]
+        },
+        {
+          "demands": [
+            {
+              "resource_id": "LASER-2",
+              "units": 1
+            },
+            {
+              "resource_id": "OPERATORE-1",
+              "units": 1
+            }
+          ]
+        }
+      ],
+      "completed_at": null,
+      "customer_priority": 0,
+      "due": "2026-10-22T15:00:00Z",
+      "duration_seconds": 7200,
+      "fixed_alternative": null,
+      "fixed_start": null,
+      "id": "ord-b/taglio",
+      "mode": null,
+      "order_id": "B",
+      "phase_priority": 0,
+      "predecessors": [],
+      "priority": 0,
+      "release": "2026-10-19T07:00:00Z",
+      "setup_seconds": 0,
+      "splittable": false
+    },
+    {
+      "alternatives": [
+        {
+          "demands": [
+            {
+              "resource_id": "PIEGA-1",
+              "units": 1
+            },
+            {
+              "resource_id": "OPERATORE-1",
+              "units": 1
+            }
+          ]
+        }
+      ],
+      "completed_at": null,
+      "customer_priority": 0,
+      "due": "2026-10-22T15:00:00Z",
+      "duration_seconds": 7200,
+      "fixed_alternative": null,
+      "fixed_start": null,
+      "id": "ord-a/piega",
+      "mode": null,
+      "order_id": "A",
+      "phase_priority": 0,
+      "predecessors": [
+        {
+          "kind": "FS",
+          "lag_seconds": 0,
+          "predecessor_id": "ord-a/taglio"
+        }
+      ],
+      "priority": 0,
+      "release": null,
+      "setup_seconds": 0,
+      "splittable": false
+    },
+    {
+      "alternatives": [
+        {
+          "demands": [
+            {
+              "resource_id": "PIEGA-1",
+              "units": 1
+            },
+            {
+              "resource_id": "OPERATORE-1",
+              "units": 1
+            }
+          ]
+        }
+      ],
+      "completed_at": null,
+      "customer_priority": 0,
+      "due": "2026-10-22T15:00:00Z",
+      "duration_seconds": 3600,
+      "fixed_alternative": null,
+      "fixed_start": null,
+      "id": "ord-b/piega",
+      "mode": null,
+      "order_id": "B",
+      "phase_priority": 0,
+      "predecessors": [
+        {
+          "kind": "FS",
+          "lag_seconds": 0,
+          "predecessor_id": "ord-b/taglio"
+        }
+      ],
+      "priority": 0,
+      "release": null,
+      "setup_seconds": 0,
+      "splittable": false
+    },
+    {
+      "alternatives": [
+        {
+          "demands": [
+            {
+              "resource_id": "SALDATURA-1",
+              "units": 1
+            }
+          ]
+        }
+      ],
+      "completed_at": null,
+      "customer_priority": 0,
+      "due": "2026-10-22T15:00:00Z",
+      "duration_seconds": 18000,
+      "fixed_alternative": null,
+      "fixed_start": null,
+      "id": "ord-a/saldatura",
+      "mode": null,
+      "order_id": "A",
+      "phase_priority": 0,
+      "predecessors": [
+        {
+          "kind": "FS",
+          "lag_seconds": 0,
+          "predecessor_id": "ord-a/piega"
+        }
+      ],
+      "priority": 0,
+      "release": null,
+      "setup_seconds": 1800,
+      "splittable": true
+    },
+    {
+      "alternatives": [
+        {
+          "demands": [
+            {
+              "resource_id": "VERNICIATORE",
+              "units": 1
+            }
+          ]
+        }
+      ],
+      "completed_at": null,
+      "customer_priority": 0,
+      "due": "2026-10-22T15:00:00Z",
+      "duration_seconds": 14400,
+      "fixed_alternative": null,
+      "fixed_start": null,
+      "id": "ord-a/verniciatura",
+      "mode": "backward",
+      "order_id": "A",
+      "phase_priority": 0,
+      "predecessors": [
+        {
+          "kind": "FS",
+          "lag_seconds": 3600,
+          "predecessor_id": "ord-a/saldatura"
+        }
+      ],
+      "priority": 0,
+      "release": null,
+      "setup_seconds": 0,
+      "splittable": false
+    },
+    {
+      "alternatives": [
+        {
+          "demands": [
+            {
+              "resource_id": "LASER-1",
+              "units": 1
+            },
+            {
+              "resource_id": "OPERATORE-1",
+              "units": 1
+            }
+          ]
+        }
+      ],
+      "completed_at": null,
+      "customer_priority": 0,
+      "due": "2026-10-22T15:00:00Z",
+      "duration_seconds": 3600,
+      "fixed_alternative": null,
+      "fixed_start": "2026-10-19T06:00:00Z",
+      "id": "ord-c/urgente",
+      "mode": null,
+      "order_id": "C",
+      "phase_priority": 0,
+      "predecessors": [],
+      "priority": 0,
+      "release": null,
+      "setup_seconds": 0,
+      "splittable": false
+    }
+  ],
+  "resources": [
+    {
+      "calendar_id": "shop",
+      "capacity": 1,
+      "id": "LASER-1",
+      "kind": "machine"
+    },
+    {
+      "calendar_id": "shop",
+      "capacity": 1,
+      "id": "LASER-2",
+      "kind": "machine"
+    },
+    {
+      "calendar_id": "shop",
+      "capacity": 1,
+      "id": "OPERATORE-1",
+      "kind": "machine"
+    },
+    {
+      "calendar_id": "shop",
+      "capacity": 1,
+      "id": "PIEGA-1",
+      "kind": "machine"
+    },
+    {
+      "calendar_id": "shop",
+      "capacity": 1,
+      "id": "SALDATURA-1",
+      "kind": "machine"
+    },
+    {
+      "calendar_id": "supplier",
+      "capacity": null,
+      "id": "VERNICIATORE",
+      "kind": "supplier"
+    }
+  ],
+  "schema_version": 1,
+  "settings": {
+    "auto_backward_days": 10,
+    "customer_weight": 1,
+    "due_weight": 1,
+    "mode": "forward",
+    "priority_weight": 10000
+  },
+  "start": "2026-10-19T00:00:00Z"
+}

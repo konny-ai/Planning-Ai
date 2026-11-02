@@ -1,0 +1,263 @@
+{
+  "assignments": [
+    {
+      "completed_at": "2026-10-18T12:00:00Z",
+      "demands": [],
+      "effective_mode": "completed",
+      "explanation": [],
+      "fixed": false,
+      "operation_ids": [
+        "ord-a/materiale"
+      ],
+      "requested_mode": "forward",
+      "segments": [],
+      "task_id": "job:ord-a/materiale"
+    },
+    {
+      "completed_at": null,
+      "demands": [
+        {
+          "resource_id": "OPERATORE-1",
+          "units": 1
+        },
+        {
+          "resource_id": "PIEGA-1",
+          "units": 1
+        }
+      ],
+      "effective_mode": "forward",
+      "explanation": [
+        "release/horizon lower bound",
+        "FS from nest:NEST-001 + 0s",
+        "start shifted by resource availability/capacity"
+      ],
+      "fixed": false,
+      "operation_ids": [
+        "ord-a/piega"
+      ],
+      "requested_mode": "forward",
+      "segments": [
+        {
+          "end": "2026-10-20T10:00:00Z",
+          "start": "2026-10-20T08:00:00Z"
+        }
+      ],
+      "task_id": "job:ord-a/piega"
+    },
+    {
+      "completed_at": null,
+      "demands": [
+        {
+          "resource_id": "SALDATURA-1",
+          "units": 1
+        }
+      ],
+      "effective_mode": "forward",
+      "explanation": [
+        "release/horizon lower bound",
+        "FS from job:ord-a/piega + 0s",
+        "start shifted by resource availability/capacity"
+      ],
+      "fixed": false,
+      "operation_ids": [
+        "ord-a/saldatura"
+      ],
+      "requested_mode": "forward",
+      "segments": [
+        {
+          "end": "2026-10-20T15:00:00Z",
+          "start": "2026-10-20T11:00:00Z"
+        },
+        {
+          "end": "2026-10-21T07:30:00Z",
+          "start": "2026-10-21T06:00:00Z"
+        }
+      ],
+      "task_id": "job:ord-a/saldatura"
+    },
+    {
+      "completed_at": null,
+      "demands": [
+        {
+          "resource_id": "VERNICIATORE",
+          "units": 1
+        }
+      ],
+      "effective_mode": "backward",
+      "explanation": [
+        "release/horizon lower bound",
+        "FS from job:ord-a/saldatura + 3600s",
+        "start shifted by resource availability/capacity"
+      ],
+      "fixed": false,
+      "operation_ids": [
+        "ord-a/verniciatura"
+      ],
+      "requested_mode": "backward",
+      "segments": [
+        {
+          "end": "2026-10-22T15:00:00Z",
+          "start": "2026-10-22T11:00:00Z"
+        }
+      ],
+      "task_id": "job:ord-a/verniciatura"
+    },
+    {
+      "completed_at": null,
+      "demands": [
+        {
+          "resource_id": "OPERATORE-1",
+          "units": 1
+        },
+        {
+          "resource_id": "PIEGA-1",
+          "units": 1
+        }
+      ],
+      "effective_mode": "forward",
+      "explanation": [
+        "release/horizon lower bound",
+        "FS from nest:NEST-001 + 0s",
+        "start shifted by resource availability/capacity"
+      ],
+      "fixed": false,
+      "operation_ids": [
+        "ord-b/piega"
+      ],
+      "requested_mode": "forward",
+      "segments": [
+        {
+          "end": "2026-10-20T12:00:00Z",
+          "start": "2026-10-20T11:00:00Z"
+        }
+      ],
+      "task_id": "job:ord-b/piega"
+    },
+    {
+      "completed_at": null,
+      "demands": [
+        {
+          "resource_id": "LASER-1",
+          "units": 1
+        },
+        {
+          "resource_id": "OPERATORE-1",
+          "units": 1
+        }
+      ],
+      "effective_mode": "fixed",
+      "explanation": [
+        "preserved fixed start"
+      ],
+      "fixed": true,
+      "operation_ids": [
+        "ord-c/urgente"
+      ],
+      "requested_mode": "forward",
+      "segments": [
+        {
+          "end": "2026-10-19T07:00:00Z",
+          "start": "2026-10-19T06:00:00Z"
+        }
+      ],
+      "task_id": "job:ord-c/urgente"
+    },
+    {
+      "completed_at": null,
+      "demands": [
+        {
+          "resource_id": "LASER-1",
+          "units": 1
+        },
+        {
+          "resource_id": "OPERATORE-1",
+          "units": 1
+        }
+      ],
+      "effective_mode": "forward",
+      "explanation": [
+        "release/horizon lower bound",
+        "start shifted by resource availability/capacity"
+      ],
+      "fixed": false,
+      "operation_ids": [
+        "ord-a/taglio",
+        "ord-b/taglio"
+      ],
+      "requested_mode": "forward",
+      "segments": [
+        {
+          "end": "2026-10-19T14:30:00Z",
+          "start": "2026-10-19T11:00:00Z"
+        }
+      ],
+      "task_id": "nest:NEST-001"
+    }
+  ],
+  "engine_version": "0.2.0",
+  "orders": [
+    {
+      "complete": true,
+      "due": "2026-10-22T15:00:00Z",
+      "end": "2026-10-22T15:00:00Z",
+      "order_id": "A",
+      "tardiness_seconds": 0
+    },
+    {
+      "complete": true,
+      "due": "2026-10-22T15:00:00Z",
+      "end": "2026-10-20T12:00:00Z",
+      "order_id": "B",
+      "tardiness_seconds": 0
+    },
+    {
+      "complete": true,
+      "due": "2026-10-22T15:00:00Z",
+      "end": "2026-10-19T07:00:00Z",
+      "order_id": "C",
+      "tardiness_seconds": 0
+    }
+  ],
+  "resources": [
+    {
+      "available_unit_seconds": 136800,
+      "booked_unit_seconds": 16200,
+      "resource_id": "LASER-1",
+      "utilization": 0.11842105263157894
+    },
+    {
+      "available_unit_seconds": 136800,
+      "booked_unit_seconds": 0,
+      "resource_id": "LASER-2",
+      "utilization": 0.0
+    },
+    {
+      "available_unit_seconds": 136800,
+      "booked_unit_seconds": 27000,
+      "resource_id": "OPERATORE-1",
+      "utilization": 0.19736842105263158
+    },
+    {
+      "available_unit_seconds": 136800,
+      "booked_unit_seconds": 10800,
+      "resource_id": "PIEGA-1",
+      "utilization": 0.07894736842105263
+    },
+    {
+      "available_unit_seconds": 136800,
+      "booked_unit_seconds": 19800,
+      "resource_id": "SALDATURA-1",
+      "utilization": 0.14473684210526316
+    },
+    {
+      "available_unit_seconds": null,
+      "booked_unit_seconds": 14400,
+      "resource_id": "VERNICIATORE",
+      "utilization": null
+    }
+  ],
+  "scenario_digest": "d904b098f8f108db3efa5a0dfa315a054d67bf7d7f42b3676e2025415fdf11ad",
+  "scenario_id": "officina-demo",
+  "schema_version": 1,
+  "unscheduled": []
+}

@@ -1,0 +1,2 @@
+id,mode,auto_backward_days,priority_weight,due_weight,customer_weight
+default,forward,10,10000,1,1

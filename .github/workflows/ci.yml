@@ -1,0 +1,71 @@
+name: CI
+# Cost control: no automatic hosted Actions while paid CI is excluded.
+# To restore CI, make an explicit cost-approved change to this trigger.
+# Local offline validation: python tools/run_free_ci.py (PR #80).
+on:
+  workflow_dispatch:
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install -e .
+      - run: python -m compileall -q src
+      - run: python -m unittest discover -s tests -t . -v
+      - run: python tools/generate_schema.py --check
+      - run: python -m planning_factory validate examples/workshop.json
+      - run: python -m planning_factory schedule examples/workshop.json -o /tmp/plan.json --html /tmp/plan.html --csv /tmp/plan.csv
+      - run: python -m planning_factory verify examples/workshop.json /tmp/plan.json
+      - run: python tools/stress_kit.py --seed 42 --operations 12 --machines 3 --repeat 2
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e .
+      - run: python -m unittest discover -s tests -t . -v
+      - run: python tools/generate_schema.py --check
+  sqlserver:
+    # Pubblicazione Factory su SQL Server reale con schema SINTETICO (tests/sql), nessun dato cliente.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SA_PASSWORD: ${{ format('Ci-{0}-{1}!x', github.run_id, github.run_attempt) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: SQL Server 2022 usa-e-getta
+        run: |
+          docker run -d --name mssql -e ACCEPT_EULA=Y -e MSSQL_PID=Developer -e MSSQL_SA_PASSWORD="$SA_PASSWORD" \
+            -p 1433:1433 mcr.microsoft.com/mssql/server:2022-latest
+          for i in $(seq 1 60); do
+            docker exec mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1 && break
+            sleep 2
+          done
+      - name: Driver ODBC 18 e dipendenze
+        run: |
+          if ! odbcinst -q -d | grep -q "ODBC Driver 18 for SQL Server"; then
+            sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+          fi
+          python -m pip install -q pyodbc -e .
+      - name: Pubblicazione su SQL Server
+        env:
+          FACTORY_PUBLISH_SQL: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=localhost;UID=sa;PWD=${{ env.SA_PASSWORD }};TrustServerCertificate=yes"
+        run: python -m unittest tests.test_factory_publish_sql -v 2>&1 | tee sql.log; grep -q "^OK$" sql.log && ! grep -q "skipped" sql.log

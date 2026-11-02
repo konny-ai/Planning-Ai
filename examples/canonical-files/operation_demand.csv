@@ -1,0 +1,17 @@
+operation_id,alternative,resource_id,units
+ord-a/taglio,0,LASER-1,1
+ord-a/taglio,0,OPERATORE-1,1
+ord-a/taglio,1,LASER-2,1
+ord-a/taglio,1,OPERATORE-1,1
+ord-b/taglio,0,LASER-1,1
+ord-b/taglio,0,OPERATORE-1,1
+ord-b/taglio,1,LASER-2,1
+ord-b/taglio,1,OPERATORE-1,1
+ord-a/piega,0,PIEGA-1,1
+ord-a/piega,0,OPERATORE-1,1
+ord-b/piega,0,PIEGA-1,1
+ord-b/piega,0,OPERATORE-1,1
+ord-a/saldatura,0,SALDATURA-1,1
+ord-a/verniciatura,0,VERNICIATORE,1
+ord-c/urgente,0,LASER-1,1
+ord-c/urgente,0,OPERATORE-1,1

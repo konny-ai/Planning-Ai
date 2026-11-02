@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#102440">
+  <meta name="description" content="Planning Factory, pianificazione a capacità finita. Dashboard dimostrativa da dati JSON/CSV.">
+  <title>Intesi Planning · Control Room</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script defer src="/data.js"></script>
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Vai al contenuto</a>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-area">
+        <button id="menu-toggle" class="icon-button mobile-menu layout-menu-toggle" aria-label="Comprimi navigazione" aria-controls="sidebar" aria-expanded="true" title="Comprimi o espandi navigazione" type="button">☰</button>
+        <span class="brand-mark" aria-hidden="true">IP</span>
+        <div class="brand-copy"><strong>Intesi Planning</strong><small>per Factory</small></div>
+        <span id="site-switch" class="site-switch"><strong>Scenario da file</strong></span>
+      </div>
+      <div class="header-actions">
+        <div id="source-chips" class="source-chips" aria-label="Stato delle fonti"></div>
+        <button id="inspector-toggle" class="header-layout-toggle" type="button" aria-label="Apri dettaglio" aria-controls="inspector" aria-expanded="false" title="Apri o chiudi dettaglio">◧</button>
+        <button id="chat-toggle" class="chat-toggle" type="button" aria-expanded="false" aria-controls="chat-panel"><span aria-hidden="true">✧</span> Assistente</button>
+        <span id="dataset-age" class="header-date" hidden>Scenario da file</span>
+        <span class="avatar" title="Workspace locale" aria-label="Workspace locale">PF</span>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside id="sidebar" class="sidebar" aria-label="Navigazione principale">
+        <div class="sidebar-inner">
+          <div class="nav-group" data-nav-section="planning">
+            <button class="nav-caption nav-section-toggle" type="button" aria-expanded="true" aria-controls="main-nav">PIANIFICAZIONE <span class="nav-section-chevron" aria-hidden="true">⌄</span></button>
+            <nav id="main-nav" aria-label="Viste di pianificazione">
+              <button class="nav-item active" data-view="machines" aria-current="page" type="button"><span class="nav-icon">▤</span> Piano macchine</button>
+              <button class="nav-item" data-view="orders" type="button"><span class="nav-icon">≡</span> Gantt commesse</button>
+              <button class="nav-item" data-view="nesting" type="button"><span class="nav-icon">◈</span> Nesting e piani di lavoro</button>
+              <button class="nav-item" data-view="loads" type="button"><span class="nav-icon">▦</span> Carichi macchine</button>
+              <button class="nav-item" data-view="materials" type="button"><span class="nav-icon">▥</span> Disponibilità materiali</button>
+              <button class="nav-item" data-view="progress" type="button"><span class="nav-icon">◷</span> Avanzamento e consuntivi</button>
+              <button class="nav-item" data-view="staged" type="button"><span class="nav-icon">▣</span> Setup / run v0.3</button>
+              <button class="nav-item" data-view="deliveries" type="button"><span class="nav-icon">♧</span> Consegne e avvisi <span id="nav-alert-count" class="nav-counter" hidden>0</span></button>
+              <button class="nav-item" data-view="calendars" type="button"><span class="nav-icon">▧</span> Calendari e turni</button>
+              <button class="nav-item" data-view="daily" type="button"><span class="nav-icon">☷</span> Programma giornaliero</button>
+            </nav>
+          </div>
+          <div class="nav-group" data-nav-section="tools">
+            <button class="nav-caption nav-section-toggle" type="button" aria-expanded="true" aria-controls="tools-nav">STRUMENTI <span class="nav-section-chevron" aria-hidden="true">⌄</span></button>
+            <nav id="tools-nav" aria-label="Strumenti">
+              <button class="nav-item" data-view="parameters" type="button"><span class="nav-icon">⚙</span> Parametri di calcolo</button>
+              <button class="nav-item" data-view="bottlenecks" type="button"><span class="nav-icon">◫</span> Colli di bottiglia</button>
+              <button class="nav-item" data-view="assistant" type="button"><span class="nav-icon">✧</span> Assistente e analisi</button>
+              <button class="nav-item" data-view="memory" type="button"><span class="nav-icon">◇</span> Memoria aziendale</button>
+            </nav>
+          </div>
+          <div class="nav-group" id="data-nav-group" data-nav-section="input" hidden>
+            <button class="nav-caption nav-section-toggle" type="button" aria-expanded="true" aria-controls="data-nav">DATI IN INGRESSO <span class="nav-section-chevron" aria-hidden="true">⌄</span></button>
+            <nav id="data-nav" aria-label="Dati in ingresso"></nav>
+          </div>
+          <div class="nav-group" id="admin-nav-group" data-nav-section="admin" hidden>
+            <button class="nav-caption nav-section-toggle" type="button" aria-expanded="true" aria-controls="admin-nav">AMMINISTRAZIONE <span class="nav-section-chevron" aria-hidden="true">⌄</span></button>
+            <nav id="admin-nav" aria-label="Amministrazione">
+              <button class="nav-item" data-view="fonti" type="button"><span class="nav-icon">⇣</span> Fonti dati</button>
+              <button class="nav-item" data-view="correzioni" type="button"><span class="nav-icon">✎</span> Registro correzioni <span class="nav-counter amber" hidden>0</span></button>
+              <button class="nav-item" data-view="impostazioni" type="button"><span class="nav-icon">✧</span> Impostazioni AI</button>
+            </nav>
+          </div>
+          <div class="sidebar-bottom">
+            <div id="plan-footnote" class="plan-footnote"></div>
+            <div class="environment-pill"><span class="environment-dot"></span> AMBIENTE DEMO</div>
+            <p>Motore indipendente da Factory<br>Dati da file · sola lettura</p>
+            <p class="build-note">Intesi Planning · motore Planning Factory</p>
+          </div>
+        </div>
+      </aside>
+
+      <main id="main" class="main" tabindex="-1">
+        <div class="page-heading">
+          <div class="heading-main">
+            <p id="page-eyebrow" class="eyebrow">OPERATIONS CONTROL CENTER</p>
+            <h1 id="page-title">Piano macchine</h1>
+            <p id="page-subtitle" class="subtitle">Piano di produzione a capacità finita, con dettaglio per risorsa e commessa.</p>
+          </div>
+          <div id="notice" class="notice-banner" role="status" aria-live="polite">
+            <span class="notice-symbol">ⓘ</span>
+            <span>Piano tecnico da file: non è collegato al gestionale Factory e non viene pubblicato.</span>
+            <button id="dismiss-notice" class="dismiss-notice" type="button" aria-label="Nascondi avviso">×</button>
+          </div>
+          <div class="heading-actions">
+            <span class="snapshot-tag"><span class="small-led"></span><span id="snapshot-label">Scenario di prova</span></span>
+            <button id="reset-button" class="btn btn-muted" type="button" hidden>↶ Annulla simulazioni</button>
+            <details id="more-menu" class="more-menu">
+              <summary class="btn btn-muted">Altre azioni <span aria-hidden="true">▾</span></summary>
+              <div id="more-list" class="more-list">
+                <button id="download-button" class="menu-item" type="button"><span aria-hidden="true">↧</span> Esporta CSV</button>
+                <button id="download-scenario" class="menu-item" type="button"><span aria-hidden="true">↧</span> Scenario JSON</button>
+                <button id="download-plan" class="menu-item" type="button"><span aria-hidden="true">↧</span> Piano JSON</button>
+              </div>
+            </details>
+            <button id="calculate-button" class="btn btn-primary" type="button"><span aria-hidden="true">↻</span> Ricalcola piano</button>
+          </div>
+        </div>
+        <div id="data-stale" class="notice-banner notice-stale" role="status" hidden>
+          <span class="notice-symbol">✎</span>
+          <span>Hai modificato i dati in ingresso: il piano mostrato non include ancora le correzioni.</span>
+          <button id="stale-recalculate" class="btn btn-primary btn-small" type="button">↻ Ricalcola ora</button>
+        </div>
+        <details id="summary-section" class="summary-section" open>
+          <summary class="summary-section-toggle"><span>Indicatori principali</span><span class="summary-toggle-hint">Comprimi</span></summary>
+          <section id="summary-cards" class="summary-grid" aria-label="Indicatori principali"></section>
+        </details>
+        <div id="view-root" class="view-root">
+          <div class="skeleton"><span></span><span></span><span></span><p>Caricamento piano…</p></div>
+        </div>
+        <footer class="content-footer">
+          <span>Planning Factory · Piano tecnico verificato, non pubblicato</span>
+          <span id="scenario-hash" title="Impronta dello scenario">—</span>
+        </footer>
+      </main>
+
+      <aside id="inspector" class="inspector" aria-label="Dettaglio selezione">
+        <div id="inspector-resize" class="panel-resize-handle" role="separator" tabindex="0" aria-label="Ridimensiona pannello dettaglio" aria-orientation="vertical" aria-valuemin="260" aria-valuemax="680" aria-valuenow="304" title="Trascina per ridimensionare"></div>
+        <div class="inspector-head">
+          <div><p class="eyebrow">DETTAGLIO</p><h2 id="inspector-title">Seleziona una lavorazione</h2></div>
+          <button id="close-inspector" class="icon-button inspector-close" type="button" aria-label="Chiudi dettaglio">×</button>
+        </div>
+        <div id="inspector-body" class="inspector-content">
+          <div class="inspector-empty"><span class="empty-illustration">▤</span><strong>La produzione, nel dettaglio.</strong><p>Seleziona una fase dal piano macchine o dal Gantt per vedere risorse, tempi e riferimenti alla commessa.</p></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <aside id="chat-panel" class="chat-panel" aria-label="Assistente di pianificazione" hidden>
+    <div id="chat-resize" class="panel-resize-handle" role="separator" tabindex="0" aria-label="Ridimensiona pannello assistente" aria-orientation="vertical" aria-valuemin="280" aria-valuemax="680" aria-valuenow="420" title="Trascina per ridimensionare"></div>
+    <div id="chat-head" class="chat-head">
+      <div class="chat-head-top">
+        <div><p class="eyebrow">ASSISTENTE</p><h2>Chiedi al piano</h2><p id="chat-mode" class="chat-mode">—</p></div>
+        <button id="chat-close" class="icon-button" type="button" aria-label="Chiudi assistente">×</button>
+      </div>
+      <div class="chat-toolbar">
+        <button id="chat-history-toggle" class="btn btn-light btn-small" type="button" aria-expanded="false" aria-controls="chat-menu" title="Conversazioni precedenti">🕘 Cronologia</button>
+        <button id="chat-voice-toggle" class="btn btn-light btn-small" type="button" aria-expanded="false" aria-controls="chat-menu" title="Dettatura e lettura ad alta voce">🔊 Voce</button>
+        <button id="chat-reset" class="btn btn-light btn-small" type="button" title="Inizia una nuova conversazione (la precedente resta in cronologia)">＋ Nuova chat</button>
+      </div>
+    </div>
+    <p id="chat-context" class="chat-context"></p>
+    <div id="chat-menu" class="chat-menu" hidden></div>
+    <div id="chat-log" class="chat-log" role="log" aria-live="polite"></div>
+    <details id="chat-suggestions-box" class="chat-suggestions-box">
+      <summary>Domande suggerite</summary>
+      <div id="chat-suggestions" class="chat-suggestions"></div>
+    </details>
+    <form id="chat-form" class="chat-form">
+      <label class="sr-only" for="chat-input">Domanda sul piano</label>
+      <textarea id="chat-input" name="question" rows="2" maxlength="1500" placeholder="Es. perché questa commessa è in ritardo?" required></textarea>
+      <button id="chat-mic" type="button" class="btn btn-light chat-mic" aria-pressed="false" title="Detta la domanda a voce" aria-label="Detta la domanda a voce" hidden>🎤</button>
+      <button id="chat-send" type="submit" class="btn btn-primary">Invia</button>
+      <button id="chat-stop" type="button" class="btn btn-light chat-stop" hidden>■ Stop</button>
+    </form>
+  </aside>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

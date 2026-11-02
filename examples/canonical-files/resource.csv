@@ -1,0 +1,7 @@
+id,calendar_id,capacity,kind
+LASER-1,shop,1,machine
+LASER-2,shop,1,machine
+OPERATORE-1,shop,1,machine
+PIEGA-1,shop,1,machine
+SALDATURA-1,shop,1,machine
+VERNICIATORE,supplier,null,supplier
