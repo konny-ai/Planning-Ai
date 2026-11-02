@@ -1,0 +1,18 @@
+Planning Factory
+Copyright (c) 2026 konny
+https://github.com/konny-ai/Planning-Ai
+
+Questo prodotto e' distribuito con licenza CPAL-1.0 (vedi LICENSE).
+
+Attribuzione obbligatoria (Exhibit B della licenza):
+  - nota di copyright: Copyright (c) 2026 konny
+  - dicitura:          Powered by konny
+  - collegamento:      https://github.com/konny-ai/Planning-Ai
+
+La dicitura deve essere mostrata in modo ben visibile nell'interfaccia
+grafica di ogni copia o prodotto derivato (anche se incluso in un altro
+software o offerto come servizio in rete) e non meno evidente di eventuali
+altre attribuzioni. Nell'interfaccia di questa versione compare nel
+pie' di pagina e nel menu laterale (src/planning_factory/web/index.html).
+
+Un'eventuale revenue e' facoltativa e non e' condizione per l'uso.

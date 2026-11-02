@@ -164,6 +164,17 @@ Prodotto e decisioni:
 - [Installazione di un pacchetto offline](docs/local-installation.md)
 - [Contribuire](CONTRIBUTING.md) · [Registro delle modifiche](CHANGELOG.md)
 
+## Licenza e attribuzione
+
+Planning Factory è software libero con licenza **CPAL-1.0** (Common Public
+Attribution License, [testo](LICENSE)). Puoi usarlo, anche in azienda e
+a fini commerciali, e modificarlo. In cambio devi mantenere la nota di
+copyright e **mostrare nell'interfaccia la dicitura "Powered by konny"**
+con il collegamento a questo repository (vale anche per chi lo offre come
+servizio in rete o lo include in un altro prodotto). Dettagli in [NOTICE](NOTICE).
+Il codice è di konny; l'uso è gratuito, e chi vuole può sostenere il progetto
+contribuendo o contattando l'autore.
+
 ## Dati e riservatezza
 
 Il repository deve contenere **solo dati sintetici o anonimizzati**. Dati
