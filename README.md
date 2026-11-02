@@ -31,8 +31,8 @@ Dal secondo avvio parte in pochi secondi. Opzioni: `avvia.bat mio.xlsx`,
 Serve **Python 3.12 o successivo**.
 
 ```sh
-git clone https://github.com/konny-ai/planning-factory.git
-cd planning-factory
+git clone https://github.com/konny-ai/Planning-Ai.git
+cd Planning-Ai
 python -m venv .venv
 . .venv/bin/activate            # Windows PowerShell: .venv\Scripts\Activate.ps1
 python -m pip install -e .

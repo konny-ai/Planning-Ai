@@ -133,7 +133,7 @@ La roadmap di sviluppo autonomo non comprende collegamento o scrittura sul datab
 
 ## Backlog parametri del motore (proposta 21/10/2026, non pianificato)
 
-Catalogo che unisce i parametri del motore nuovo, degli adapter Factory e del planner storico, con la valutazione di ciascuno e 20 proposte di sviluppo (P1–P20): [parametri del motore](parametri-motore.md), issue [#78](https://github.com/konny-ai/planning-factory/issues/78). Sono voci di backlog: nessuna è implementata e ognuna richiede una issue con criteri di accettazione prima dello sviluppo.
+Catalogo che unisce i parametri del motore nuovo, degli adapter Factory e del planner storico, con la valutazione di ciascuno e 20 proposte di sviluppo (P1–P20): [parametri del motore](parametri-motore.md), issue #78. Sono voci di backlog: nessuna è implementata e ognuna richiede una issue con criteri di accettazione prima dello sviluppo.
 
 ## Dati canonici, connettori e prodotto (ADR 004, 21/10/2026)
 

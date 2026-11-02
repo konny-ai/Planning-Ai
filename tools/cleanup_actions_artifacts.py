@@ -12,7 +12,7 @@ import json
 import subprocess
 import sys
 
-REPOS = ("konny-ai/planning-factory", "repository privato dei dati di test")
+REPOS = ("konny-ai/Planning-Ai", "repository privato dei dati di test")
 PROTECTED_WORDS = ("backup", "snapshot", "bancoa", "database", "release")
 
 

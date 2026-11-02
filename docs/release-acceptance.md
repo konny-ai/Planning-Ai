@@ -47,7 +47,7 @@ confrontarli con GitHub Actions e con il sistema del cliente.
   346 attività schedulate, 0 non schedulate, 721 blocchi di pianificazione
   riletti senza differenze. Verifica della **baseline**, non di tutte le
   novità v0.3.
-- [CI precedente su main](https://github.com/konny-ai/planning-factory/actions/runs/39564693566):
+- CI precedente su main:
   test automatici del motore, Python Linux/Windows e SQL di prova.
 - Prove di setup e distinta/pegging e tecnologia su dati sintetici
   nel repository; non esiste ancora accettazione di tutte le condizioni

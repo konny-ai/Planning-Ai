@@ -67,8 +67,8 @@ il launcher: `py -3.13 --version` (elenco: `py -0p`).
 ## 2. Scaricare il codice
 
 ```sh
-git clone https://github.com/konny-ai/planning-factory.git
-cd planning-factory
+git clone https://github.com/konny-ai/Planning-Ai.git
+cd Planning-Ai
 ```
 
 ## 3. Creare l'ambiente e installare
