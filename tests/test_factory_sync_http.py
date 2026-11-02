@@ -36,11 +36,16 @@ class FactorySyncHTTPTests(unittest.TestCase):
         self.assertEqual(self.request('/api/factory-source/run',dict(start='2026-10-26',password=''))[0],403)
         self.assertEqual(self.request('/api/factory-source')[0],200)
 
-    def test_unconfigured_pipeline_keeps_the_input_intact(self):
+    def test_first_sync_without_settings_starts_from_the_current_excel_and_keeps_it_intact(self):
         before=self.path.read_bytes()
-        code,result=self.request('/api/factory-source/run',dict(start='2026-10-26',password=''))
-        self.assertEqual(code,503)
+        self.assertTrue(self.request('/api/factory-source')[1]['pipeline_configured'])
+        with patch.object(FactoryWorkbookSync,'_run_worker'):
+            code,result=self.request('/api/factory-source/run',dict(start='2026-10-26',password=''))
+        self.assertEqual(code,202)
         self.assertEqual(self.path.read_bytes(),before)
+        baseline=json.loads((self.root/'factory-sync/bootstrap-baseline.json').read_text(encoding='utf-8'))
+        self.assertEqual(baseline['source']['database'],'Factory_Cliente')
+        self.assertTrue(baseline['tables']['operation'])
 
     def test_documented_sql_is_available_only_for_known_areas_and_admin(self):
         folder=self.root/'integrations/cliente-export/views';folder.mkdir(parents=True)

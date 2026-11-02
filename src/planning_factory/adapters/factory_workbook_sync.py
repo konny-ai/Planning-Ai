@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 
 from planning_factory.adapters.factory_extraction import FactoryExtraction
 from planning_factory.adapters.workbook_io import read_tables
-from planning_factory.adapters.workbook_merge import MARKER
+from planning_factory.adapters.workbook_merge import MARKER,json_bytes
 from planning_factory.adapters.json_io import loads,plan_loads,scenario_digest
 from planning_factory.domain.validation import ValidationError
 from planning_factory.engine.verification import verify_plan
@@ -46,7 +46,8 @@ class FactoryWorkbookSync(FactoryExtraction):
         result=super().config()
         result.update(mode='factory-excel-planning')
         result.setdefault('start',self.state.source.start.astimezone(ZoneInfo('Europe/Rome')).date().isoformat())
-        result['pipeline_configured']=self.settings_path.exists()
+        try:self._settings();result['pipeline_configured']=True
+        except (ValidationError,OSError,ValueError):result['pipeline_configured']=False
         return result
 
     def save_config(self,data):
@@ -58,12 +59,18 @@ class FactoryWorkbookSync(FactoryExtraction):
         return self.config()
 
     def _settings(self):
+        if not self.settings_path.exists():
+            # Public installation: the scripts are the ones next to the installed package.
+            root=Path(__file__).resolve().parents[3]
+            if not (root/'integrations/cliente-export/views').is_dir():
+                raise ValidationError(['Sincronizzazione non configurata: mancano gli script del progetto (usa l’installazione dal repository).'])
+            return dict(pipeline_root=str(root),bootstrap_baseline='')
         data=json.loads(self.settings_path.read_text(encoding='utf-8'))
         for key in ('pipeline_root','bootstrap_baseline'):
             if not isinstance(data.get(key),str):raise ValidationError(['Configurazione sincronizzazione incompleta: '+key])
         return data
 
-    def _baseline(self,tables,settings):
+    def _baseline(self,tables,settings,config):
         marker=next((r for r in tables.get('source',[]) if r['id']==MARKER),None)
         if marker:
             h=marker.get('content_hash','')
@@ -71,8 +78,15 @@ class FactoryWorkbookSync(FactoryExtraction):
             path=self.output_dir/'baselines'/(h+'.json')
             if hashlib.sha256(path.read_bytes()).hexdigest()!=h:raise ValidationError(['Base sincronizzazione modificata o corrotta'])
             return path
-        path=Path(settings['bootstrap_baseline'])
-        if not path.is_file():raise ValidationError(['Base iniziale assente: nessun aggiornamento per evitare la perdita delle modifiche Excel.'])
+        if settings['bootstrap_baseline']:
+            path=Path(settings['bootstrap_baseline'])
+            if not path.is_file():raise ValidationError(['Base iniziale assente: nessun aggiornamento per evitare la perdita delle modifiche Excel.'])
+            return path
+        # First synchronisation: the current Excel is the starting point. Factory then
+        # replaces what differs; the Excel is copied to history/ before it is replaced.
+        path=self.output_dir/'bootstrap-baseline.json'
+        envelope=dict(schema_version=1,source={k:config[k] for k in ('server','database','views')},tables=tables)
+        path.write_bytes(json_bytes(envelope))
         return path
 
     def _save_status(self,**values):
@@ -124,7 +138,7 @@ class FactoryWorkbookSync(FactoryExtraction):
         if config['user'] and not password:raise ValidationError(['Password SQL richiesta per questa estrazione'])
         settings=self._settings()
         content=self.state.path.read_bytes();tables,_,_=read_tables(self.state.path,for_sync=True)
-        baseline=self._baseline(tables,settings)
+        baseline=self._baseline(tables,settings,config)
         with self.lock:
             if self._worker_active:raise ValidationError(['Attendere la conclusione della sincronizzazione precedente'])
             jid=uuid.uuid4().hex
