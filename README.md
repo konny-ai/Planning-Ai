@@ -26,6 +26,27 @@ Dal secondo avvio parte in pochi secondi. Opzioni: `avvia.bat mio.xlsx`,
 `avvia.bat semplice`, `avvia.bat test`, `avvia.bat ferma`
 (tutte in [docs/guida-installazione.md](docs/guida-installazione.md)).
 
+### Collegare il proprio database Factory (da zero, in 5 passi)
+
+1. Scarica il repository e fai doppio clic su `avvia.bat`.
+2. Nella Control Room apri **Fonti dati**, pannello *Factory → Excel → Piano*.
+3. Scrivi **istanza** (`SERVER\ISTANZA`), **nome del database**, **utente** e
+   **password** SQL (utente vuoto = autenticazione Windows). La password non
+   viene salvata.
+4. Premi **Verifica SQL e viste**; se mancano viste premi **Crea viste mancanti**
+   (serve il permesso `CREATE VIEW`: crea solo ciò che non esiste, non tocca
+   le viste già presenti).
+5. Premi **Sincronizza Factory → Excel → Piano**: i dati di Factory riempiono
+   il tuo Excel di lavoro (`istanza\pianificazione.xlsx`, fuori da git), il piano
+   viene ricalcolato e verificato e tutta la Control Room mostra i dati nuovi.
+   Il file d'esempio incluso non viene mai modificato; prima di ogni
+   aggiornamento una copia dell'Excel resta in `istanza\factory-sync\history`.
+
+Servono Microsoft ODBC Driver 17 o 18 per SQL Server (`pyodbc` lo installa
+`avvia.bat`) e un database Factory con le tabelle e le funzioni standard da cui
+le viste dipendono; se ne manca una, la vista interessata viene segnalata con
+il motivo.
+
 ### Linea di comando (Windows, Linux, macOS)
 
 Serve **Python 3.12 o successivo**.
