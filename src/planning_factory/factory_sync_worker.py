@@ -24,15 +24,21 @@ def prepare(request_path,*,resolution=None):
     if {k:request['config'][k].casefold() for k in ('server','database')} != {
             k:base['source'][k].casefold() for k in ('server','database')}:
         raise ValueError('La base di sincronizzazione appartiene a un altro server/database; usare una istanza distinta.')
+    policy=next((r.get('residual_policy') for r in local['domain_policy'] if r['domain']=='progress'),'quantity')
     remote_path=root/'remote.json'
     if not remote_path.exists():
         phase('Lettura Factory e viste SQL')
-        policy=next((r.get('residual_policy') for r in local['domain_policy'] if r['domain']=='progress'),'quantity')
         remote=extract_tables(request['pipeline_root'],root/'extraction',request['config'],request['start'],progress=policy)
         remote_path.write_bytes(json_bytes(remote))
     remote=json.loads(remote_path.read_text(encoding='utf-8'))
     phase('Confronto dati Factory e modifiche Excel')
     tables,merge=merge_tables(base['tables'],local,remote,resolution=resolution)
+    # Factory populates these domains; a workbook that never had them must declare them as managed.
+    declared={r['domain'] for r in tables['domain_policy']}
+    for row in (dict(domain='materials',coverage='gestito',allocation_order='due'),
+                dict(domain='nesting',coverage='gestito'),
+                dict(domain='progress',coverage='gestito',residual_policy=policy)):
+        if row['domain'] not in declared:tables['domain_policy'].append(row)
     (root/'merge.json').write_bytes(json_bytes(merge))
     if merge['conflict_count'] and resolution is None:
         phase('Conflitti da risolvere; Excel attivo non modificato')

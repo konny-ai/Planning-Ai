@@ -33,6 +33,10 @@ def equal(a,b,field=''):
     if a is ABSENT or b is ABSENT:return a is b
     if isinstance(a,dict) and isinstance(b,dict):
         return a.keys()==b.keys() and all(equal(a[k],b[k],k) for k in a)
+    if isinstance(a,Decimal)!=isinstance(b,Decimal) and a is not None and b is not None:
+        # A stored baseline keeps numbers as text; the workbook reads them as Decimal.
+        try:return Decimal(str(a))==Decimal(str(b))
+        except ArithmeticError:pass
     if field.endswith(('_seconds','_minutes')) and a is not None and b is not None:
         try:return seconds(a,field)==seconds(b,field)
         except ValidationError:pass
