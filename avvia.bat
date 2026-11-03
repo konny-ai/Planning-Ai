@@ -12,7 +12,8 @@ REM
 REM  Uso:
 REM    avvia.bat                    Control Room completa con l'esempio incluso,
 REM                                 porta 8770; salva revisioni, regole e audit
-REM                                 nella cartella "istanza"
+REM                                 nella cartella "istanza" (il file Excel di lavoro
+REM                                 e' la copia istanza\pianificazione.xlsx)
 REM    avvia.bat esempio 8800       esempio incluso, con un'altra porta
 REM    avvia.bat mio.xlsx           un tuo workbook Excel (o scenario .json)
 REM    avvia.bat mio.xlsx 8800      con un'altra porta
@@ -129,6 +130,13 @@ if not defined AVVIA_NOBROWSER (
     start "" /b powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 4; Start-Process 'http://127.0.0.1:%PORT%'"
 )
 
+REM L'esempio incluso non si modifica: la sincronizzazione con Factory lavora su una copia
+REM personale (istanza\pianificazione.xlsx), cosi' i dati del cliente restano fuori da git.
+if /i "%MODE%"=="salva" if /i "%FIXTURE%"=="examples\planning-workbook\esempio-completo.xlsx" (
+    if not exist "istanza" mkdir "istanza"
+    if not exist "istanza\pianificazione.xlsx" copy /y "%FIXTURE%" "istanza\pianificazione.xlsx" >nul
+)
+if /i "%MODE%"=="salva" if /i "%FIXTURE%"=="examples\planning-workbook\esempio-completo.xlsx" set "FIXTURE=istanza\pianificazione.xlsx"
 if /i not "%MODE%"=="test" if not exist "%FIXTURE%" (
     echo ERRORE: file non trovato: %FIXTURE%
     goto :errore
