@@ -1,6 +1,7 @@
 """Versioned strict JSON boundary. Unknown fields and implicit conversions fail."""
 import hashlib
 import json
+import threading
 from dataclasses import fields, is_dataclass
 from datetime import UTC, date, datetime, time
 from planning_factory.domain.models import (
@@ -58,6 +59,7 @@ def dumps(value) -> str:
     return json.dumps(primitive(value), ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False) + '\n'
 
 
+_DIGESTS_LOCK = threading.Lock()   # the service plans in threads: guard eviction and insertion
 _DIGESTS: dict = {}   # id(scenario) -> (scenario, digest); the strong reference keeps the id unique
 
 
@@ -70,9 +72,10 @@ def scenario_digest(s: Scenario) -> str:
     if hit is not None and hit[0] is s:
         return hit[1]
     digest = hashlib.sha256(dumps(s).encode('utf-8')).hexdigest()
-    if len(_DIGESTS) >= 16:
-        _DIGESTS.pop(next(iter(_DIGESTS)))
-    _DIGESTS[id(s)] = (s, digest)
+    with _DIGESTS_LOCK:
+        while len(_DIGESTS) >= 16:
+            _DIGESTS.pop(next(iter(_DIGESTS)), None)
+        _DIGESTS[id(s)] = (s, digest)
     return digest
 
 

@@ -5,7 +5,8 @@ from unittest import mock
 from dataclasses import replace
 from datetime import timedelta
 
-from planning_factory.domain.models import Dependency, Nesting, Operation, Resource
+from datetime import time
+from planning_factory.domain.models import Calendar, Dependency, Nesting, Operation, Resource, Shift
 from planning_factory.domain.validation import compile_tasks
 from planning_factory.engine import scheduler
 from planning_factory.engine.scheduler import _reusable, plan
@@ -150,23 +151,27 @@ class SearchWindowTests(unittest.TestCase):
     """The windowed first pass must never change a plan."""
 
     def long_scenario(self, rng):
-        machines = ['m1', 'm2'][:rng.randint(1, 2)]
+        machines = ['m1', 'm2', 'sp'][:rng.randint(1, 3)]     # 'sp' has a sparse calendar
         ops = []
         names = [f'p{i}' for i in range(rng.randint(4, 12))]
         for i, name in enumerate(names):
             preds = tuple(Dependency(names[j], rng.choice(['FS', 'SS']), rng.choice([0, 3600]))
                           for j in range(i) if rng.random() < 0.2)
             hours = rng.choice([1, 8, 40, 80, 160])      # long tasks push work past the window
-            ops.append(Operation(name, f'o{i % 3}', hours * 3600, (alt(rng.choice(machines)),),
+            choices = rng.sample(machines, rng.randint(1, len(machines)))     # one or several alternatives
+            ops.append(Operation(name, f'o{i % 3}', hours * 3600, tuple(alt(m) for m in choices),
                                  predecessors=preds, splittable=rng.random() < 0.6,
                                  due=dt(month=12, day=rng.randint(1, 20)) if rng.random() < 0.5 else None,
                                  release=dt(day=rng.randint(19, 28)) if rng.random() < 0.3 else None))
-        return scenario(ops, resources=tuple(Resource(m, 'work') for m in machines),
+        sparse = Calendar('sparse', 'UTC', (Shift(0, time(8), time(9)),))    # one hour every Monday
+        work = scenario([]).calendars[0]
+        return scenario(ops, calendars=(work, sparse),
+                        resources=tuple(Resource(m, 'sparse' if m == 'sp' else 'work') for m in machines),
                         end=dt(month=12, day=30, hour=0))
 
     def test_windowed_search_equals_full_horizon_search(self):
-        beyond = 0
-        for seed in range(200):
+        beyond = multi = 0
+        for seed in range(400):
             s = self.long_scenario(random.Random(900 + seed))
             with self.subTest(seed=seed):
                 windowed = plan(s)
@@ -175,7 +180,26 @@ class SearchWindowTests(unittest.TestCase):
                 self.assertEqual(windowed, full)
                 limit = s.start + timedelta(days=14)
                 beyond += any(a.segments and a.segments[0].start > limit for a in full.assignments)
+                multi += sum(len(o.alternatives) > 1 for o in s.operations)
         self.assertGreater(beyond, 20, 'some tasks must land beyond the window (fallback path)')
+        self.assertGreater(multi, 100, 'tasks with several alternatives must be exercised')
+
+    def test_task_with_an_alternative_that_only_fits_later_keeps_the_full_search_choice(self):
+        # B fits only beyond the window but starts earlier than A (earliest start wins): the
+        # window must not turn this into A. Found by code review; reproduced before the fix.
+        work = scenario([]).calendars[0]
+        sparse = Calendar('sparse', 'UTC', (Shift(0, time(8), time(9)),))
+        ops = [Operation('block', 'o0', 72 * 3600, (alt('A'),), fixed_start=dt(day=19, hour=8), splittable=True),
+               Operation('T', 'o1', 4 * 3600, (alt('A'), alt('B')), splittable=True)]
+        s = scenario(ops, calendars=(work, sparse), resources=(Resource('A', 'work'), Resource('B', 'sparse')),
+                     end=dt(month=12, day=30, hour=0))
+        windowed = plan(s)
+        with mock.patch.object(scheduler, 'SEARCH_WINDOW', None):
+            full = plan(s)
+        self.assertEqual(windowed, full)
+        chosen = next(a for a in full.assignments if a.task_id == 'job:T')
+        self.assertEqual([d.resource_id for d in chosen.demands], ['B'])
+        self.assertEqual(chosen.segments[0].start, dt(day=19, hour=8))
 
 
 class CompileMemoTests(unittest.TestCase):
@@ -197,3 +221,31 @@ class CompileMemoTests(unittest.TestCase):
         for _ in range(2):                                 # failures are not cached
             with self.assertRaises(validation.ValidationError):
                 compile_tasks(invalid)
+
+
+class TraceAndLockTests(unittest.TestCase):
+    def test_trace_describes_the_returned_plan_only_when_it_is_the_first_one(self):
+        s = scenario([Operation(f'p{i}', f'o{i}', 3600, (alt('m'),), due=dt(day=25, hour=17)) for i in range(4)])
+        trace = {}
+        returned = plan(s, trace=trace)
+        self.assertIs(trace['plan'], returned)
+
+    def test_caches_survive_concurrent_use(self):
+        import threading
+        from planning_factory.adapters.json_io import scenario_digest
+        base = scenario([Operation('a', 'o', 3600, (alt('m'),))])
+        errors = []
+
+        def worker(n):
+            try:
+                for i in range(1500):
+                    s = replace(base, id=f'x{n}-{i}')
+                    compile_tasks(s)
+                    scenario_digest(s)
+            except Exception as exc:       # pragma: no cover - the point is that none occurs
+                errors.append(repr(exc))
+
+        threads = [threading.Thread(target=worker, args=(n,)) for n in range(8)]
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+        self.assertEqual(errors, [])

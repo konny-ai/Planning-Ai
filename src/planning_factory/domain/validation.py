@@ -1,4 +1,5 @@
 """Strict domain validation and conversion of operations into atomic booking tasks."""
+import threading
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .models import Alternative, Edge, Scenario, Task
@@ -171,6 +172,7 @@ def bundle_key(a: Alternative) -> tuple:
     return tuple(sorted(a.demands))
 
 
+_COMPILED_LOCK = threading.Lock()   # the service plans in threads: guard eviction and insertion
 _COMPILED: dict = {}   # id(scenario) -> (scenario, tasks, edges, order); the strong ref keeps the id unique
 
 
@@ -187,9 +189,10 @@ def compile_tasks(s: Scenario) -> tuple[dict[str, Task], tuple[Edge, ...], tuple
     if hit is not None and hit[0] is s:
         return dict(hit[1]), hit[2], hit[3]
     tasks, edges, order = _compile_tasks(s)
-    if len(_COMPILED) >= 16:
-        _COMPILED.pop(next(iter(_COMPILED)))
-    _COMPILED[id(s)] = (s, tasks, edges, order)
+    with _COMPILED_LOCK:
+        while len(_COMPILED) >= 16:
+            _COMPILED.pop(next(iter(_COMPILED)), None)
+        _COMPILED[id(s)] = (s, tasks, edges, order)
     return dict(tasks), edges, order
 
 

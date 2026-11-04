@@ -14,6 +14,16 @@ esatta con piano completo su 250 scenari casuali, su 150 scenari a stadi e sui c
 completate e inizi fissi; stesso hash delle prenotazioni sulle misure: 80 fasi 11,4 s -> 8,9 s,
 160 fasi 32,3 s -> 22,6 s. Il resto del tempo e' nel calcolo degli intervalli liberi.
 
+## Non rilasciato — correzioni dalla revisione del codice
+
+(1) Finestra di ricerca: con piu' alternative poteva scegliere una macchina diversa dalla ricerca
+completa (vedi sopra). (2) `plan(trace=)` scrive la traccia dopo il ciclo di riparazione, quindi
+descrive sempre il piano restituito quando c'e' una traccia. (3) Le cache per oggetto di
+`compile_tasks` e `scenario_digest` sono protette da un lock (il servizio pianifica in thread) e
+l'eviction non puo' piu' fallire con una chiave gia' rimossa. Non applicati: dividere
+`setup_sequence_search.py` (819 righe) e l'handler `setup-stages` della CLI (~215 righe): sono
+refactoring ampi senza cambiamento di comportamento.
+
 ## Non rilasciato — schema del report di `setup-stages`
 
 `contracts/setup-stages-report-v1.schema.json`: il formato del report per le integrazioni. Un
@@ -69,8 +79,10 @@ degli ingressi fermano il calcolo senza scrivere il report; mai pubblicabile su 
 
 (1) `subtract` degli intervalli lavora sui tagli invece che su ogni intervallo (provato uguale alla
 definizione su 3.000 casi casuali); (2) la ricerca in avanti guarda prima in una finestra di 14
-giorni (`scheduler.SEARCH_WINDOW`) e poi sull'orizzonte intero: uno slot trovato nella finestra e'
-quello che troverebbe la ricerca completa, quindi il piano non cambia (provato su 200 scenari con
+giorni (`scheduler.SEARCH_WINDOW`) e poi sull'orizzonte intero; la finestra decide solo se **ogni**
+alternativa del task vi trova posto (una che entra solo dopo potrebbe comunque vincere sull'orizzonte
+intero, partendo prima: difetto trovato dalla revisione del codice e corretto, con test che fallisce
+senza la correzione), quindi il piano non cambia (provato su 200 scenari con
 attivita' lunghe, anche oltre la finestra; escluse ricerche all'indietro, a inizio esatto e con
 alternativa preferita); (3) `compile_tasks` e' memorizzato per oggetto scenario, restituendo
 sempre un dizionario nuovo. Stesso hash delle prenotazioni su tutte le misure; backward: 80 fasi

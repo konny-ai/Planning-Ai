@@ -10,10 +10,11 @@ from .calendars import expand
 
 
 MAX_BACKWARD_REPAIRS = 5
-# Forward searches look first in a window this long and only then in the whole horizon. A
-# slot found inside the window is the one the full search would pick (the earliest fit, on
-# intervals that are identical up to the window end), so the result never depends on it; set
-# to None to search the whole horizon every time.
+# Forward searches look first in a window this long and only then in the whole horizon. When
+# EVERY alternative of the task fits inside the window, each of them is placed exactly where the
+# full search would place it (the earliest fit, on intervals identical up to the window end), so
+# the choice among them and the plan are the same; otherwise the whole horizon decides. Set to
+# None to search the whole horizon every time.
 SEARCH_WINDOW = timedelta(days=14)
 
 
@@ -37,9 +38,6 @@ def plan(s: Scenario, *, dispatch_policy: str = 'priority',
     """
     shifts: dict[str, int] = {}
     best = _schedule(s, dispatch_policy, dispatch_order, record_constraints, shifts, report := {}, resume)
-    if trace is not None and not shifts and 'order' in report:
-        trace.update(order=report['order'], tasks=report['tasks'], edges=report['edges'], scenario=s,
-                     plan=best, record_constraints=record_constraints)
     for _ in range(MAX_BACKWARD_REPAIRS):
         if not report['shifts']:
             break
@@ -50,6 +48,10 @@ def plan(s: Scenario, *, dispatch_policy: str = 'priority',
         if _rank(candidate) > _rank(best):
             break
         best, shifts, report = candidate, trial, trial_report
+    if trace is not None and not shifts and 'order' in report:
+        # Only the first plan carries a trace: a repaired plan (shifts) is a different plan.
+        trace.update(order=report['order'], tasks=report['tasks'], edges=report['edges'], scenario=s,
+                     plan=best, record_constraints=record_constraints)
     return best
 
 
@@ -206,12 +208,14 @@ def _schedule(s: Scenario, dispatch_policy: str, dispatch_order, record_constrai
         # (its 'saves only Ns' note compares against slots that may lie beyond the window).
         if (SEARCH_WINDOW is not None and not backward and exact is None and max_start is None
                 and t.preferred_bundle is None and lower + SEARCH_WINDOW < upper):
-            found = search_in(t, lower, lower + SEARCH_WINDOW, backward, exact, max_start)
+            # Every alternative must fit inside the window: one that only fits later could still
+            # win the full search (earliest start first), so then the whole horizon decides.
+            found = search_in(t, lower, lower + SEARCH_WINDOW, backward, exact, max_start, True)
             if found:
                 return found
         return search_in(t, lower, upper, backward, exact, max_start)
 
-    def search_in(t, lower, upper, backward=False, exact=None, max_start=None):
+    def search_in(t, lower, upper, backward=False, exact=None, max_start=None, require_all=False):
         choices = []
         # Different efficiencies give different planned times (#78 P9): then the earliest finish wins,
         # otherwise the historical earliest start (same duration, so nearly the same finish).
@@ -246,7 +250,7 @@ def _schedule(s: Scenario, dispatch_policy: str, dispatch_order, record_constrai
                        else (segments[-1].end.timestamp(), segments[0].start.timestamp()) if by_finish
                        else (segments[0].start.timestamp(), segments[-1].end.timestamp()))
                 choices.append((key, tuple(sorted(alternative.demands)), segments))
-        if not choices:
+        if not choices or (require_all and len(choices) < len(t.alternatives)):
             return None
         _, demands, segments = best = min(choices)
         if t.preferred_bundle is not None and min_gain and exact is None:
