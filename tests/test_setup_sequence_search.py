@@ -128,6 +128,15 @@ class DefaultSequenceAndInsertionTests(unittest.TestCase):
         self.assertEqual(default_machine_sequence(s), ('job:b', 'job:a', 'job:c'))
         self.assertEqual(default_machine_sequence(s), default_machine_sequence(s))
 
+    def test_default_sequence_puts_completed_history_first_and_searches(self):
+        s = base([op('a', due=dt(day=20)), op('b', hours=0, completed_at=dt(hour=0)),
+                  op('c')])
+        seq = default_machine_sequence(s)
+        self.assertEqual(seq[0], 'job:b')
+        auto = optimize_setup_sequence(s, three(), objective='setup', max_evaluations=12)
+        self.assertEqual(auto.sequence[0], 'job:b')
+        self.assertEqual(verify_plan(auto.winner.scenario, auto.winner.plan), ())
+
     def test_search_without_initial_sequence_uses_default(self):
         s = base([op('a'), op('b'), op('c')])
         auto = optimize_setup_sequence(s, three(), objective='setup', max_evaluations=12)

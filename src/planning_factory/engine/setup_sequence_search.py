@@ -58,6 +58,19 @@ def sequence_metrics(s: Scenario, solution: StagedSetupResult) -> SequenceMetric
                 item_due = item_due.astimezone(UTC)
                 if order not in due or item_due < due[order]:
                     due[order] = item_due
+    for tid, task in tasks.items():
+        if task.completed_at is None:
+            continue
+        done_at = task.completed_at.astimezone(UTC)
+        for oid in task.operation_ids:
+            order = owner[oid].order_id
+            if order not in ends or ends[order] < done_at:
+                ends[order] = done_at
+            item_due = owner[oid].due
+            if item_due is not None:
+                item_due = item_due.astimezone(UTC)
+                if order not in due or item_due < due[order]:
+                    due[order] = item_due
     incomplete = {o.order_id for o in s.operations} - set(ends)
     if incomplete:
         raise ValidationError([f'incomplete orders in staged KPI: {sorted(incomplete)}'])
@@ -84,7 +97,7 @@ def default_machine_sequence(s: Scenario) -> tuple[str, ...]:
     """Deterministic starting order: earliest due date first, precedence-safe.
 
     Kahn topological order over the compiled task graph; among ready tasks the
-    key is (has no due, due, release, priority, id). It is a neutral, explicit
+    key is (active, has no due, due, release, priority, id). It is a neutral, explicit
     heuristic that invents no business weights; the caller may still pass any
     other sequence. Feasibility is still decided by the staged scheduler audit.
     """
@@ -97,7 +110,7 @@ def default_machine_sequence(s: Scenario) -> tuple[str, ...]:
 
     def key(tid):
         t = tasks[tid]
-        return (t.due is None, t.due.timestamp() if t.due is not None else 0,
+        return (t.completed_at is None, t.due is None, t.due.timestamp() if t.due is not None else 0,
                 t.release.timestamp() if t.release is not None else 0,
                 t.priority, tid)
 

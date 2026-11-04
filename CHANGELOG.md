@@ -11,6 +11,13 @@ Ogni candidato resta verificato dallo scheduler a due stadi e dall'audit
 indipendente; nessuna garanzia di ottimalità globale. Test in
 `tests/test_setup_sequence_search.py`.
 
+Lo scheduler a due stadi accetta ora le **fasi già completate** come storico:
+nessuna prenotazione, precedenze dei successori soddisfatte, stato macchina
+osservato aggiornato (devono precedere le fasi attive sulla stessa macchina),
+audit che rifiuta nuove prenotazioni per esse e KPI che ne usano il
+completamento. Restano rifiutati inizi fissi, modalità backward e fornitori
+esterni.
+
 ## Non rilasciato — assistente conversazionale (ramo feat/cliente-assistente-chat-v2)
 
 Pannello **Assistente** in ogni vista della Control Room, con conversazione,

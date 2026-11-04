@@ -105,6 +105,10 @@ def audit_stage_capacity(contract: SetupContract, s: Scenario,
         phase = phases[pid]
         decision = decisions[pid]
         setup_required = decision.requires_setup and decision.setup_seconds > 0
+        if tasks[pid].completed_at is not None:
+            if (pid, 'setup') in records or (pid, 'run') in records:
+                errors.append(f'{pid}: completed phase must not carry new bookings')
+            continue
         if phase.setup_locked and setup_required and (pid, 'setup') not in frozen:
             # A flag alone is not evidence that the original setup was kept.
             errors.append(f'{pid}: locked setup requires frozen booking reference')

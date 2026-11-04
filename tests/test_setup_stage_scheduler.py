@@ -223,5 +223,61 @@ class TwoStageSchedulerTests(unittest.TestCase):
             schedule_setup_stages(base(), contract, ('job:a', 'job:b'),
                                   frozen_bookings=(wrong,))
 
+class CompletedPhaseTests(unittest.TestCase):
+    def _done(self, **kw):
+        return base([op('a', hours=0, completed_at=dt(hour=0)), op('b', **kw)])
+
+    def test_completed_phase_has_no_booking_and_sets_machine_state(self):
+        contract = load_setup_contract(json.dumps(spec()))
+        s = self._done()
+        result = schedule_setup_stages(s, contract, ('job:a', 'job:b'))
+        keys = {(b.phase_id, b.stage) for b in result.bookings}
+        # a (BLUE) already ran, so b (BLUE) needs no setup either.
+        self.assertEqual(keys, {('job:b', 'run')})
+        self.assertEqual(audit_stage_capacity(contract, s, ('job:a', 'job:b'),
+                                              result.bookings), ())
+
+    def test_state_change_after_completed_phase_still_needs_setup(self):
+        data = spec()
+        data['phases'][1]['target_state'] = 'RED'
+        contract = load_setup_contract(json.dumps(data))
+        result = schedule_setup_stages(self._done(), contract, ('job:a', 'job:b'))
+        self.assertEqual({(b.phase_id, b.stage) for b in result.bookings},
+                         {('job:b', 'setup'), ('job:b', 'run')})
+
+    def test_completed_predecessor_does_not_block_successor(self):
+        s = base([op('a', hours=0, completed_at=dt(hour=0)),
+                  op('b', predecessors=(Dependency('a', 'FS'),))])
+        contract = load_setup_contract(json.dumps(spec()))
+        result = schedule_setup_stages(s, contract, ('job:a', 'job:b'))
+        run = next(b for b in result.bookings if b.stage == 'run')
+        self.assertEqual(run.segments[0].start, dt(hour=8))
+
+    def test_completed_must_precede_active_on_same_machine(self):
+        contract = load_setup_contract(json.dumps(spec()))
+        with self.assertRaisesRegex(ValidationError, 'must precede active'):
+            schedule_setup_stages(self._done(), contract, ('job:b', 'job:a'))
+
+    def test_audit_rejects_booking_for_completed_phase(self):
+        contract = load_setup_contract(json.dumps(spec()))
+        s = base([op('a', hours=0, completed_at=dt(hour=0)), op('b')])
+        result = schedule_setup_stages(s, contract, ('job:a', 'job:b'))
+        extra = StageBooking('job:a', 'run',
+                             (Interval(dt(hour=10), dt(hour=11)),),
+                             (StageAllocation('m', 10000), StageAllocation('op', 2500)))
+        errors = audit_stage_capacity(contract, s, ('job:a', 'job:b'),
+                                      (*result.bookings, extra))
+        self.assertTrue(any('completed phase must not carry' in e for e in errors))
+
+    def test_completed_order_counts_in_kpis(self):
+        from planning_factory.engine.setup_sequence_search import sequence_metrics
+        contract = load_setup_contract(json.dumps(spec()))
+        s = base([op('a', hours=0, order_id='o1', completed_at=dt(hour=0), due=dt(hour=9)),
+                  op('b', order_id='o2')])
+        result = schedule_setup_stages(s, contract, ('job:a', 'job:b'))
+        m = sequence_metrics(s, result)
+        self.assertEqual(m.late_orders, 0)
+
+
 if __name__ == '__main__':
     unittest.main()

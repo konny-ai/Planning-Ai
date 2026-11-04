@@ -72,6 +72,8 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
     and start before material arrives; run starts after release/dependencies.
     Setup never overlaps the preceding run on the same machine. Fully intact
     one-segment frozen stages can be pinned; partial WIP still fails closed.
+    Already completed phases are history: they hold no booking, satisfy
+    their successors' precedences and advance the observed machine state.
     """
     if type(max_alternatives) is not int or not 1 <= max_alternatives <= 256:
         raise ValueError('max_alternatives must be an integer between 1 and 256')
@@ -81,10 +83,22 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
     phases = {p.id: p for p in contract.phases}
     if set(tasks) != set(phases) or len(machine_sequence) != len(tasks) or set(machine_sequence) != set(tasks):
         raise ValidationError(['ordered canonical phases must correspond exactly to compiled run tasks'])
+    done = {pid for pid, t in tasks.items() if t.completed_at is not None}
     if any(t.mode != 'forward' or t.fixed_start is not None or t.fixed_alternative is not None
-           or t.completed_at is not None or t.external_end is not None or t.duration_seconds <= 0
+           or t.external_end is not None or (t.completed_at is None and t.duration_seconds <= 0)
            for t in tasks.values()):
-        raise ValidationError(['staged setup planner currently requires active, unfixed forward run tasks'])
+        raise ValidationError(['staged setup planner currently requires active, unfixed forward run tasks '
+                               '(already completed tasks are accepted as history)'])
+    # A completed phase really ran: it updates the observed machine state, so it
+    # must come before every still-active phase on the same machine.
+    seen_active = set()
+    for pid in machine_sequence:
+        mid = phases[pid].machine_id
+        if pid in done:
+            if mid in seen_active:
+                raise ValidationError([f'{pid}: completed phase must precede active phases on machine {mid}'])
+        else:
+            seen_active.add(mid)
     by_id = {r.id: r for r in s.resources}
     if any(r.id not in by_id or by_id[r.id].kind != r.kind or
            by_id[r.id].capacity is None for r in contract.resources):
@@ -110,6 +124,8 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
         key = (booking.phase_id, booking.stage)
         if key in frozen or booking.phase_id not in tasks or booking.stage not in ('setup', 'run'):
             raise ValidationError([f'invalid or duplicate frozen stage {key}'])
+        if booking.phase_id in done:
+            raise ValidationError([f'{key}: completed phase cannot also carry a frozen booking'])
         if len(booking.segments) != 1:
             raise ValidationError([f'{key}: frozen stage must have exactly one intact segment'])
         segment = booking.segments[0]
@@ -139,6 +155,8 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
     machine_prev = {}
     edges_for_run = {pid: [] for pid in machine_sequence}
     for edge in edges:
+        if edge.predecessor in done or edge.successor in done:
+            continue  # a completed predecessor is already satisfied
         edges_for_run[edge.successor].append(
             Dependency(run_ids[edge.predecessor], edge.kind, edge.lag_seconds))
     state = {d.phase_id: d for d in resolve_setup_states(contract, machine_sequence)}
@@ -147,6 +165,8 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
     for pid in machine_sequence:
         task, phase = tasks[pid], phases[pid]
         decision = state[pid]
+        if pid in done:
+            continue  # history: no setup/run booking; state already advanced
         if phase.setup_locked and decision.requires_setup and decision.setup_seconds and (pid, 'setup') not in frozen:
             raise ValidationError([f'{pid}: locked setup requires a trusted frozen booking'])
         if (pid, 'setup') in frozen and not (decision.requires_setup and decision.setup_seconds):
