@@ -1,5 +1,18 @@
 # Changelog
 
+## Non rilasciato — prestazioni del backward
+
+Il backward richiedeva una ripianificazione per ogni tentativo: ora (1) il rilascio piu'
+tardo di un setup e il ritardo di una lavorazione sono limitati dai calendari delle loro
+risorse (un limite superiore sicuro: la contesa puo' solo anticiparlo), (2) se gia' uno
+spostamento minimo (1 s per il setup, 1 minuto per la lavorazione) disturba le altre
+prenotazioni non si esplorano gli spostamenti intermedi (euristica prudente: al piu' si
+perde uno stringimento, mai la validita'), (3) `scenario_digest` e' memorizzato per
+oggetto (scenario immutabile). Misure: 80 fasi 26 s -> 11,7 s, 160 fasi 123 s -> 33 s,
+320 fasi oltre 400 s -> 141 s. Il piano singolo resta sotto 0,35 s a 320 fasi. I risultati
+possono differire leggermente dalla versione precedente (mai peggiori sui KPI, gap
+totale uguale o minore sulle prove). Benchmark riproducibile: `tools/stage_bench.py`.
+
 ## Non rilasciato — fasi senza risorse candidate (ADR 006, opzione B)
 
 `plan_setup_stages_partial` / `setup-stages --partial [--no-candidate ...]`: si pianifica

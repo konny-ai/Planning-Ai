@@ -10,6 +10,7 @@ from datetime import UTC, timedelta
 from planning_factory.domain.models import Scenario
 from planning_factory.domain.setup_contract import SetupContract
 from planning_factory.domain.validation import ValidationError, compile_tasks
+from .calendars import expand, intersect
 from .setup_stage_scheduler import StagedSetupResult, schedule_setup_stages
 
 
@@ -358,32 +359,44 @@ def just_in_time_tail(s: Scenario, contract: SetupContract,
         members = set(task.operation_ids)
         accepted = None
         shift = slack
-        # Wall-clock slack ignores calendars: when the full delay is infeasible
-        # (non-working days, horizon end) try progressively smaller delays.
-        for _ in range(6):
-            new_release = run.segments[0].start + shift
+        bound = _latest_start(current_s, run, run.segments[-1].end + slack, task.splittable)
+        if bound is not None:
+            shift = min(shift, bound - run.segments[0].start)
+            if shift.total_seconds() <= 0:
+                continue  # the calendars leave no room to delay this run
+        def attempt(delay):
+            release = run.segments[0].start + delay
             candidate_s = replace(current_s, operations=tuple(
-                replace(o, release=new_release) if o.id in members else o
+                replace(o, release=release) if o.id in members else o
                 for o in current_s.operations))
             try:
                 candidate = schedule_setup_stages(candidate_s, contract, machine_sequence,
                                                   max_alternatives=max_alternatives,
                                                   frozen_bookings=frozen_bookings)
             except ValidationError:
-                shift = shift / 2
-                continue
-            others_same = sorted((x for x in candidate.bookings if x.phase_id != pid),
-                                 key=lambda x: (x.phase_id, x.stage)) == \
-                sorted((x for x in current.bookings if x.phase_id != pid),
-                       key=lambda x: (x.phase_id, x.stage))
+                return None
+            rest = lambda r: sorted((x for x in r.bookings if x.phase_id != pid),
+                                    key=lambda x: (x.phase_id, x.stage))
             new_metrics = sequence_metrics(candidate_s, candidate)
-            no_worse = (new_metrics.late_orders <= metrics.late_orders and
-                        new_metrics.tardiness_seconds <= metrics.tardiness_seconds and
-                        new_metrics.setup_seconds <= metrics.setup_seconds)
-            if others_same and no_worse:
-                accepted = (candidate_s, candidate, new_metrics, int(shift.total_seconds()))
-                break
-            shift = shift / 2
+            if (rest(candidate) == rest(current) and
+                    new_metrics.late_orders <= metrics.late_orders and
+                    new_metrics.tardiness_seconds <= metrics.tardiness_seconds and
+                    new_metrics.setup_seconds <= metrics.setup_seconds):
+                return candidate_s, candidate, new_metrics, int(delay.total_seconds())
+            return None
+
+        # Wall-clock slack ignores calendars: when the full delay is not accepted
+        # (non-working days, horizon end, a shared resource that would move other
+        # work) try progressively smaller delays. Prudent heuristic: if even a
+        # one-minute delay disturbs the rest, smaller ones are not explored; it
+        # can only miss a delay, never break validity.
+        accepted = attempt(shift)
+        if accepted is None and shift > timedelta(minutes=1) and attempt(timedelta(minutes=1)) is not None:
+            for _ in range(5):
+                shift = shift / 2
+                accepted = attempt(shift)
+                if accepted is not None:
+                    break
         if accepted:
             current_s, current, metrics, applied = accepted
             delayed.append((pid, applied))
@@ -391,6 +404,44 @@ def just_in_time_tail(s: Scenario, contract: SetupContract,
             rejected.append(pid)
     return JustInTimeResult(current, current_s, baseline, metrics,
                             tuple(delayed), tuple(rejected))
+
+
+def _latest_start(s: Scenario, booking, window_end, splittable=True):
+    """Upper bound of a stage's start from calendars alone.
+
+    The stage has to finish by ``window_end``, so it can start no later than the
+    start of the latest working slots, common to all its resources, that hold
+    its total booked seconds (one single slot when it cannot be split). Contention with other
+    bookings can only make the real answer earlier, so this is a safe upper
+    bound for the bisection, never a different answer. None if it cannot be
+    computed (the caller then keeps the plain wall-clock bound).
+    """
+    resources = {r.id: r for r in s.resources}
+    calendars = {c.id: c for c in s.calendars}
+    window_start = booking.segments[0].start
+    free = None
+    for allocation in booking.allocations:
+        resource = resources.get(allocation.resource_id)
+        calendar = calendars.get(resource.calendar_id) if resource else None
+        if calendar is None:
+            return None
+        slots = expand(calendar, window_start, window_end)
+        free = slots if free is None else intersect(free, slots)
+    if free is None:
+        return None
+    need = sum(i.seconds for i in booking.segments)
+    start = None
+    for slot in reversed(free):
+        if not splittable:
+            if slot.seconds >= need:
+                return slot.end - timedelta(seconds=need)
+            continue
+        take = min(need, slot.seconds)
+        start = slot.end - timedelta(seconds=take)
+        need -= take
+        if need <= 0:
+            return start
+    return None
 
 
 @dataclass(frozen=True)
@@ -462,18 +513,28 @@ def backward_setup_before_run(s: Scenario, contract: SetupContract,
                 return trial, candidate, new_metrics
             return None
 
-        low, high, accepted = 0, int(gap.total_seconds()), None
-        full = attempt(high)
+        high = int(gap.total_seconds())
+        bound = _latest_start(current_s, setup, run.segments[0].start)
+        if bound is not None:
+            high = max(0, min(high, int((bound - setup.segments[0].start).total_seconds())))
+        low, accepted = 0, None
+        full = attempt(high) if high > 0 else None
         if full is not None:
             accepted = full
-        else:
-            while high - low > 1:
-                mid = (low + high) // 2
-                found = attempt(mid)
-                if found is not None:
-                    low, accepted = mid, found
-                else:
-                    high = mid
+        elif high > 1:
+            # Prudent heuristic: if even a one-second shift disturbs other
+            # bookings (typically a shared operator), larger shifts are not
+            # explored. It can only miss a tightening, never break validity.
+            probe = attempt(1)
+            if probe is not None:
+                low, accepted = 1, probe
+                while high - low > 1:
+                    mid = (low + high) // 2
+                    found = attempt(mid)
+                    if found is not None:
+                        low, accepted = mid, found
+                    else:
+                        high = mid
         if not accepted:
             continue
         releases, current, metrics = accepted

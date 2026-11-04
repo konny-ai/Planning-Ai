@@ -38,8 +38,22 @@ def dumps(value) -> str:
     return json.dumps(primitive(value), ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False) + '\n'
 
 
+_DIGESTS: dict = {}   # id(scenario) -> (scenario, digest); the strong reference keeps the id unique
+
+
 def scenario_digest(s: Scenario) -> str:
-    return hashlib.sha256(dumps(s).encode('utf-8')).hexdigest()
+    """SHA-256 of the canonical JSON. Memoized per scenario *object*: scenarios
+    are frozen dataclasses of tuples, so the digest of one object never changes
+    (the planner asks for it several times per plan). The cache is small and
+    holds a strong reference so an id can never be reused by another object."""
+    hit = _DIGESTS.get(id(s))
+    if hit is not None and hit[0] is s:
+        return hit[1]
+    digest = hashlib.sha256(dumps(s).encode('utf-8')).hexdigest()
+    if len(_DIGESTS) >= 16:
+        _DIGESTS.pop(next(iter(_DIGESTS)))
+    _DIGESTS[id(s)] = (s, digest)
+    return digest
 
 
 def obj(value, cls, required=()):

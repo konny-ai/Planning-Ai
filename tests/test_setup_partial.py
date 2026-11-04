@@ -92,3 +92,21 @@ class PartialPlanningTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class DigestMemoTests(unittest.TestCase):
+    def test_digest_is_memoized_per_object_and_never_stale(self):
+        from dataclasses import replace
+        from planning_factory.adapters.json_io import dumps, scenario_digest
+        import hashlib
+        s = base([op('a')])
+        first = scenario_digest(s)
+        self.assertEqual(first, hashlib.sha256(dumps(s).encode('utf-8')).hexdigest())
+        self.assertEqual(first, scenario_digest(s))
+        changed = replace(s, id='other')           # a different object: a different digest
+        self.assertNotEqual(first, scenario_digest(changed))
+        for i in range(40):                         # eviction keeps results exact
+            other = replace(s, id=f'x{i}')
+            self.assertEqual(scenario_digest(other),
+                             hashlib.sha256(dumps(other).encode('utf-8')).hexdigest())
+        self.assertEqual(first, scenario_digest(s))

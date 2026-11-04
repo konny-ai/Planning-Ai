@@ -39,3 +39,18 @@ su una installazione cliente.
 La suite automatica include casi piccoli e ripetibili per Linux e Windows.
 Benchmark ampi si eseguono manualmente; la CI evita prove troppo
 lunghe o dipendenti dall'hardware del runner.
+
+
+## Scheduler a due stadi: `tools/stage_bench.py`
+
+```sh
+python tools/stage_bench.py --phases 80 --machines 5 --backward --json bench.json
+```
+
+Misura, su scenari sintetici con seme fisso, il tempo di un piano a stadi, di una
+ricerca di sequenza da 10 valutazioni e (con `--backward`) della politica backward
+(ADR 005, opzione A). I tempi dipendono dalla macchina: confrontare esecuzioni sulla
+stessa. Misure di riferimento di questa implementazione (stessa macchina, un solo
+giro): 80 fasi, piano 0,06 s e backward 11,7 s; 160 fasi, 0,11 s e 32,9 s; 320 fasi,
+0,31 s e 140,6 s. Prima dell'ottimizzazione il backward richiedeva 26 s a 80 fasi e
+123 s a 160; a 320 superava i 400 s.
