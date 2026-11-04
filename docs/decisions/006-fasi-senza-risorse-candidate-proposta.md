@@ -88,3 +88,14 @@ risorse candidate risultano non pianificate con motivo esplicito.
 - I KPI di consegna non sono definiti per le commesse senza alcuna fase pianificata
   (il report li omette); le commesse con fasi non pianificate vanno lette insieme
   all'elenco `unplanned`, non come consegne rispettate.
+
+## Setup dinamici: stato macchina (confermato)
+
+Risposta del committente (04/11/2026) alla domanda 3: lo stato macchina e'
+**dichiarato nel file e valido a inizio orizzonte** (contratto setup v1,
+`initial_machine_states`; un dato mancante o `null` significa stato sconosciuto e
+quindi setup, mai "gia' pronto"). Nessuna scadenza dello stato e nessun reset
+dopo fermi o guasti: e' il comportamento gia' implementato, quindi non cambia
+nulla nel codice. Resta aperta solo la domanda 4 (preattrezzaggio esterno,
+cioe' setup mentre la macchina lavora un altro pezzo): oggi il setup non puo'
+sovrapporsi alla lavorazione precedente sulla stessa macchina e l'audit lo verifica.
