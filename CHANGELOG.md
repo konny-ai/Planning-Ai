@@ -41,6 +41,17 @@ guasto silenzioso che la renderebbe inutile e il piano solo piu' lento non passa
 quando un'alternativa non ci sta, e che non superi mai il limite superiore della ricerca (un successore con inizio
 fisso).
 
+## Non rilasciato — test di mutazione del parser della specifica v0.3 e della politica del workbook
+
+Il parser della specifica (un file esterno) aveva 14 mutanti su 28 individuati: ora 26 (restano due equivalenti, un
+percorso inesistente che fallisce comunque e un `NaN` impossibile dopo il parsing). Un test a tabella controlla, con il
+messaggio esatto di ciascuna, estensione e dimensione del file, versione dello schema (anche testo e booleano), formato
+del digest, le combinazioni di modalita' non ammesse (normale con WIP o blocchi, in pausa con blocchi, blocchi con
+osservazioni o avanzamenti, in pausa senza avanzamenti, blocchi senza blocchi), la conferma dei residui fuori dalla
+modalita' in pausa, l'intervallo di `max_alternatives` (1 e 64 validi), durate originale/lavorata/residua pari a zero e
+timestamp nulli o con frazioni. Politica `objective` del workbook: ora anche le righe con codice giusto ma tipo
+sbagliato e viceversa. Solo test.
+
 ## Non rilasciato — test di mutazione della pipeline materiali e del report HTML
 
 Pipeline materiali: l'audit finale della pipeline (`piano` + `capacita'`) era provato solo quando falliscono

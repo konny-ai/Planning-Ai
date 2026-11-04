@@ -104,6 +104,65 @@ class StagedFilePreviewTests(unittest.TestCase):
         self.assertTrue(self.from_file(spec_with(quantity="0.001")).supplies)       # ordinary values still pass
         self.assertTrue(self.from_file(spec_with(quantity="123456789012345")).supplies)
 
+    def _write_and_load(self, value, name="stage.json", text=None):
+        with tempfile.TemporaryDirectory() as folder:
+            filename=Path(folder)/name
+            filename.write_text(text if text is not None else json.dumps(value),encoding="utf-8")
+            return load_staged_file(filename,self.scenario)
+
+    def test_the_spec_loader_rejects_each_malformed_shape_with_its_own_message(self):
+        # Mutation testing: most of these guards were only exercised indirectly (or not at all).
+        obs={"machine_id":"m","observed_at":"2026-10-19T00:00:00Z","state_id":"BLUE","source_ref":"MES:m","idle_confirmed":True}
+        prog={"task_id":"job:a","machine_id":"m","original_seconds":3600,"worked_seconds":1200,
+              "remaining_seconds":2400,"paused_at":"2026-10-19T00:00:00Z","source_ref":"MES:run"}
+        hold={"resource_id":"m","observed_at":"2026-10-19T00:00:00Z","reserved_until":"2026-10-19T11:00:00Z",
+              "source_ref":"MES:hold","occupying_task_id":"EXT-1"}
+        raw=self.raw
+        cases=[("schema 2",{**raw,"schema_version":2},"schema_version must be 1"),
+               ("schema text",{**raw,"schema_version":"1"},"schema_version must be 1"),
+               ("schema bool",{**raw,"schema_version":True},"schema_version must be 1"),
+               ("digest upper case",{**raw,"source_scenario_digest":raw["source_scenario_digest"].upper()},"exact SHA256"),
+               ("digest short",{**raw,"source_scenario_digest":raw["source_scenario_digest"][:63]},"exact SHA256"),
+               ("digest number",{**raw,"source_scenario_digest":5},"exact SHA256"),
+               ("normal + observations",{**raw,"observations":[obs]},"normal mode forbids"),
+               ("normal + progress",{**raw,"paused_progresses":[prog]},"normal mode forbids"),
+               ("normal + hold",{**raw,"active_holds":[hold]},"normal mode forbids"),
+               ("paused + hold",{**raw,"mode":"paused","paused_progresses":[prog],"observations":[obs],
+                                 "active_holds":[hold],"residual_material_requirements_confirmed":True},
+                "cannot be combined with an active hold"),
+               ("holds + observations",{**raw,"mode":"holds","active_holds":[hold],"observations":[obs]},
+                "cannot infer paused WIP"),
+               ("holds + progress",{**raw,"mode":"holds","active_holds":[hold],"paused_progresses":[prog]},
+                "cannot infer paused WIP"),
+               ("paused without progress",{**raw,"mode":"paused"},"paused mode requires explicit"),
+               ("holds without holds",{**raw,"mode":"holds"},"holds mode requires explicit"),
+               ("confirmation outside paused",{**raw,"residual_material_requirements_confirmed":True},"reserved for paused"),
+               ("confirmation not a bool",{**raw,"residual_material_requirements_confirmed":"yes"},"reserved for paused"),
+               *[(f"zero {field}",{**raw,"mode":"paused","observations":[obs],
+                                   "paused_progresses":[{**prog,field:0}],
+                                   "residual_material_requirements_confirmed":True},"exact integer seconds")
+                 for field in ("original_seconds","worked_seconds","remaining_seconds")],
+               ("fractional timestamp",{**raw,"stock":{"accounting":"net","supplies":[
+                   {"id":"s","item_id":"I","quantity":"1","available_at":"2026-10-20T09:00:00.5Z"}]}},"UTC offset required|second precision"),
+               ("null timestamp",{**raw,"stock":{"accounting":"net","supplies":[
+                   {"id":"s","item_id":"I","quantity":"1","available_at":None}]}},"UTC offset|non-null")]
+        for alternatives in (0,65,-1,1.5,"8",None):
+            cases.append((f"max_alternatives {alternatives!r}",{**raw,"max_alternatives":alternatives},"max_alternatives must be 1..64"))
+        for label,spec_,message in cases:
+            with self.subTest(label=label),self.assertRaisesRegex(ValidationError,message):
+                self._write_and_load(spec_)
+        for alternatives in (1,64):                                    # the legal extremes
+            self.assertEqual(self._write_and_load({**raw,"max_alternatives":alternatives}).max_alternatives,alternatives)
+
+    def test_the_spec_file_itself_must_be_a_small_json_file(self):
+        with self.assertRaisesRegex(ValidationError,"JSON file under 1 MiB"):
+            self._write_and_load(self.raw,name="stage.txt")
+        from planning_factory.adapters import staged_file
+        padding=" "*(staged_file.MAX_SPEC_BYTES+1)
+        with self.assertRaisesRegex(ValidationError,"JSON file under 1 MiB"):
+            self._write_and_load(None,text="{"+padding+"}")
+        self.assertTrue(self._write_and_load(self.raw,name="STAGE.JSON").supplies==())     # case-insensitive suffix
+
     def test_synthetic_generator_binds_scenario_and_stage_spec(self):
         from tools.generate_v03_stage_demo import make_example
         scenario, request = make_example()

@@ -145,6 +145,8 @@ class WorkbookTests(unittest.TestCase):
             dict(id=f'O{i}',kind=k,code=c,value=v,unit='scelta') for i,(k,c,v) in enumerate(rows)])
         cases=((('politica','planning_direction','sideways'),'valore ammesso'),
                (('budget','max_evaluations','10'),'impostazione non supportata'),
+               (('obiettivo','planning_direction','backward'),'impostazione non supportata'),   # right code, wrong kind
+               (('politica','not_a_setting','backward'),'impostazione non supportata'),       # right kind, wrong code
                (('politica','sequence_objective','setup'),'richiede planning_direction'),
                (('politica','sequence_objective','flow'),'valore ammesso'))
         for row,message in cases:
