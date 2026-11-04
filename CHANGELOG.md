@@ -1,5 +1,12 @@
 # Changelog
 
+## Non rilasciato — backward nel file staged v0.3
+
+Il file JSON dell'anteprima v0.3 accetta `backward` (booleano esplicito) e
+`sequence_objective` (`delivery`/`setup`/`gap`, richiede `backward`), che attivano
+l'opzione A dopo i gate dei materiali. Nessun cambiamento senza i campi. Il flusso
+Excel (workbook) non e' ancora collegato: richiede una voce di politica dedicata.
+
 ## Non rilasciato — riproducibilità: `setup-stages --replay`
 
 I rilasci derivati dei setup non possono stare nello scenario esportato (i setup

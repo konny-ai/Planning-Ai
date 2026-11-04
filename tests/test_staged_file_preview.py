@@ -62,6 +62,32 @@ class StagedFilePreviewTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError,"paused mode requires"):
             self.from_file(raw)
 
+    def test_backward_and_objective_in_the_spec(self):
+        from .helpers import dt
+        scenario=base([op('a',due=dt(day=23,hour=17)),op('b',due=dt(day=23,hour=17))])
+        raw={**self.raw,"source_scenario_digest":scenario_digest(scenario)}
+        with tempfile.TemporaryDirectory() as folder:
+            def load(value):
+                filename=Path(folder)/"stage.json"
+                filename.write_text(json.dumps(value),encoding="utf-8")
+                return load_staged_file(filename,scenario)
+            forward=calculate_staged_preview(scenario,load(raw))
+            spec_back=load({**raw,"backward":True})
+            self.assertTrue(spec_back.backward)
+            back=calculate_staged_preview(scenario,spec_back)
+            self.assertIsNotNone(back.backward)
+            f={(x.phase_id,x.stage):x for x in forward.staged.bookings}
+            b={(x.phase_id,x.stage):x for x in back.staged.bookings}
+            self.assertGreater(b[("job:b","run")].segments[0].start,f[("job:b","run")].segments[0].start)
+            searched=calculate_staged_preview(
+                scenario,load({**raw,"backward":True,"sequence_objective":"setup"}))
+            self.assertEqual(sorted(searched.machine_sequence),["job:a","job:b"])
+            for bad,message in (({**raw,"backward":"yes"},"explicit boolean"),
+                                ({**raw,"sequence_objective":"setup"},"requires backward"),
+                                ({**raw,"backward":True,"sequence_objective":"flow"},"delivery, setup or gap")):
+                with self.assertRaisesRegex(ValidationError,message):
+                    load(bad)
+
     def test_synthetic_generator_binds_scenario_and_stage_spec(self):
         from tools.generate_v03_stage_demo import make_example
         scenario, request = make_example()

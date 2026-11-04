@@ -44,6 +44,8 @@ class StagedFileRequest:
     residual_material_requirements_confirmed: bool
     max_alternatives: int
     mode: str
+    backward: bool = False
+    sequence_objective: str | None = None
 
 
 def _keys(value, required, optional=(), label="object"):
@@ -135,7 +137,8 @@ def load_staged_file(path: Path, scenario: Scenario) -> StagedFileRequest:
     required=("schema_version","source_scenario_digest","mode","setup_contract",
               "machine_sequence","task_priority","stock","needs")
     optional=("frozen_bookings","max_alternatives","observations",
-              "paused_progresses","active_holds","residual_material_requirements_confirmed")
+              "paused_progresses","active_holds","residual_material_requirements_confirmed",
+              "backward","sequence_objective")
     r=_keys(raw,required,optional,"v0.3 specification")
     if type(r["schema_version"]) is not int or r["schema_version"]!=1:
         raise ValidationError(["v0.3 specification schema_version must be 1"])
@@ -227,17 +230,27 @@ def load_staged_file(path: Path, scenario: Scenario) -> StagedFileRequest:
     alternatives=r.get("max_alternatives",32)
     if type(alternatives) is not int or not 1<=alternatives<=64:
         raise ValidationError(["max_alternatives must be 1..64"])
+    backward=r.get("backward",False)
+    objective=r.get("sequence_objective")
+    if type(backward) is not bool:
+        raise ValidationError(["backward must be an explicit boolean"])
+    if objective is not None and objective not in ("delivery","setup","gap"):
+        raise ValidationError(["sequence_objective must be delivery, setup or gap"])
+    if objective is not None and not backward:
+        raise ValidationError(["sequence_objective requires backward=true"])
     return StagedFileRequest(contract,sequence,tuple(supplies),tuple(needs),
                              priority,accounting=="net",commitments,frozen,
                              tuple(observations),tuple(progresses),tuple(holds),
-                             confirmed,alternatives,mode)
+                             confirmed,alternatives,mode,backward,objective)
 
 
 def calculate_staged_preview(scenario: Scenario, spec: StagedFileRequest):
     opts={"supply_quantities_net_of_external_commitments":spec.inventory_net,
           "external_commitments":spec.external_commitments,
           "frozen_bookings":spec.frozen_bookings,
-          "max_alternatives":spec.max_alternatives}
+          "max_alternatives":spec.max_alternatives,
+          "backward":spec.backward,
+          "sequence_objective":spec.sequence_objective}
     if spec.mode=="paused":
         return plan_residual_wip_materials_and_setup(
             scenario,spec.setup_contract,spec.machine_sequence,

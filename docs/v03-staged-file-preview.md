@@ -196,3 +196,19 @@ Per non saturare il browser la timeline mostra inizialmente
 la tabella sotto elenca fino a 250 booking nel dettaglio.
 Questo non altera la verifica del motore né autorizza
 spostamenti, trascinamenti o pubblicazione degli stage.
+
+
+## Backward opzionale (ADR 005, opzione A)
+
+Il file accetta due campi opzionali:
+
+- `"backward": true` — dopo allocazione e audit dei materiali, lavorazioni al piu'
+  tardi e attrezzaggi subito prima (si ritarda soltanto: i materiali restano
+  garantiti; le prenotazioni congelate restano identiche);
+- `"sequence_objective": "delivery" | "setup" | "gap"` — richiede `backward: true`
+  e cerca la sequenza macchina valutando ogni candidato sul proprio piano backward.
+
+`backward` deve essere un booleano esplicito; qualunque altro valore, o un obiettivo
+diverso da quelli elencati (ad esempio `flow`), viene rifiutato. Senza i campi il
+comportamento e' quello di prima. La sequenza effettivamente usata e' in
+`MaterialStagedPlan.machine_sequence`.
