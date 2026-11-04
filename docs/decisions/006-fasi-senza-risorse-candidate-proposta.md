@@ -99,3 +99,12 @@ dopo fermi o guasti: e' il comportamento gia' implementato, quindi non cambia
 nulla nel codice. Resta aperta solo la domanda 4 (preattrezzaggio esterno,
 cioe' setup mentre la macchina lavora un altro pezzo): oggi il setup non puo'
 sovrapporsi alla lavorazione precedente sulla stessa macchina e l'audit lo verifica.
+
+## Preattrezzaggio esterno (confermato: no)
+
+Risposta del committente (04/11/2026) alla domanda 4: **il setup non si svolge mai
+mentre la macchina lavora il pezzo precedente**; parte solo a macchina libera. E' il
+comportamento gia' implementato (il setup dipende dalla fine della lavorazione
+precedente sulla stessa macchina e l'audit rifiuta le sovrapposizioni con l'errore
+"setup overlaps preceding machine job"), quindi non cambia nulla nel codice. Con
+questo l'ADR 006 non ha piu' domande aperte.

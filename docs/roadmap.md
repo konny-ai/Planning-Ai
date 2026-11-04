@@ -90,7 +90,7 @@ Il confronto `integrations/factory-export/tools/compare_bench.py` può ora emett
 - [x] Gestione eccezioni e variazioni calendario Factory nel convertitore (PR #38).
 - [x] Strategia esplicita per le fasi senza risorse candidate: opzione B ([ADR 006](decisions/006-fasi-senza-risorse-candidate-proposta.md)), opt-in con `setup-stages --partial`.
 - [x] Stato macchina: dichiarato nel file e valido a inizio orizzonte (confermato, ADR 006); nessun codice nuovo.
-- [ ] Preattrezzaggio esterno (setup mentre la macchina lavora un altro pezzo): domanda aperta in ADR 006.
+- [x] Preattrezzaggio esterno: escluso, il setup parte solo a macchina libera (confermato, ADR 006); nessun codice nuovo.
 
 ## Ottimizzazione indipendente dal DB Factory (incremento sperimentale)
 
