@@ -202,6 +202,9 @@ def audit_stage_capacity(contract: SetupContract, s: Scenario,
         if run and run.segments:
             if run.segments[0].start < tasks[pid].release:
                 errors.append(f'{pid}: processing starts before release or material availability')
+            if (tasks[pid].fixed_start is not None and (pid, 'run') not in frozen
+                    and run.segments[0].start != tasks[pid].fixed_start):
+                errors.append(f'{pid}: run does not start at its fixed_start')
             if pid in floors and run.segments[0].start < floors[pid]:
                 errors.append(f'{pid}: processing starts before supplier milestone end plus lag')
             machine_ready = previous_machine_run_end.get(phase.machine_id)

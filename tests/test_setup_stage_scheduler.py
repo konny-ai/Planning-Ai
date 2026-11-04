@@ -8,7 +8,7 @@ from planning_factory.domain.validation import ValidationError
 from planning_factory.engine.setup_stage_scheduler import schedule_setup_stages
 from planning_factory.engine.setup_capacity import StageAllocation, StageBooking, audit_stage_capacity
 from planning_factory.engine.verification import verify_plan
-from .helpers import dt, op, scenario
+from .helpers import alt, dt, op, scenario
 
 
 def requirement(kind, count, bps, ids):
@@ -326,6 +326,59 @@ class SupplierMilestoneTests(unittest.TestCase):
         search = optimize_setup_sequence(s, c, objective='delivery')
         self.assertEqual(search.sequence, ('job:a',))
 
+
+class FixedStartTests(unittest.TestCase):
+    def _c(self):
+        data = spec()
+        data['phases'] = [data['phases'][0]]
+        return load_setup_contract(json.dumps(data))
+
+    def test_run_is_pinned_and_setup_finishes_before_it(self):
+        s = base([op('a', fixed_start=dt(day=19, hour=10))])
+        c = self._c()
+        result = schedule_setup_stages(s, c, ('job:a',))
+        run = next(b for b in result.bookings if b.stage == 'run')
+        setup = next(b for b in result.bookings if b.stage == 'setup')
+        self.assertEqual(run.segments[0].start, dt(day=19, hour=10))
+        self.assertLessEqual(setup.segments[-1].end, run.segments[0].start)
+        self.assertEqual(audit_stage_capacity(c, s, ('job:a',), result.bookings), ())
+
+    def test_infeasible_pin_fails_closed(self):
+        # Fixed start at 8:00 leaves no room for the 30 min setup before it.
+        s = base([op('a', fixed_start=dt(day=19, hour=8))])
+        with self.assertRaises(ValidationError):
+            schedule_setup_stages(s, self._c(), ('job:a',))
+
+    def test_audit_rejects_moved_run(self):
+        s = base([op('a', fixed_start=dt(day=19, hour=10))])
+        c = self._c()
+        result = schedule_setup_stages(s, c, ('job:a',))
+        moved = tuple(
+            StageBooking(b.phase_id, b.stage,
+                         (Interval(dt(day=19, hour=11), dt(day=19, hour=12)),), b.allocations)
+            if b.stage == 'run' else b for b in result.bookings)
+        self.assertTrue(any('fixed_start' in e for e in
+                            audit_stage_capacity(c, s, ('job:a',), moved)))
+
+    def test_fixed_alternative_restricts_eligible_machines(self):
+        # The fixed alternative narrows the run to machine m2; a contract
+        # that names machine m is therefore rejected, one naming m2 is planned.
+        s = scenario([op('a', resource='m', fixed_start=dt(day=19, hour=10),
+                         alternatives=(alt('m'), alt('m2')), fixed_alternative=1)],
+                     resources=(Resource('m', 'work'), Resource('m2', 'work'),
+                                Resource('op', 'work', kind='operator'),
+                                Resource('tool', 'work', kind='tool')))
+        with self.assertRaisesRegex(ValidationError, 'not an eligible run machine'):
+            schedule_setup_stages(s, self._c(), ('job:a',))
+        data = spec()
+        data['phases'] = [dict(data['phases'][0], machine_id='m2')]
+        for key in ('setup_requirements', 'run_requirements'):
+            data['phases'][0][key][0]['candidate_ids'] = ['m2']
+        data['resources'].append({'id': 'm2', 'kind': 'machine'})
+        data['initial_machine_states']['m2'] = 'RED'
+        result = schedule_setup_stages(s, load_setup_contract(json.dumps(data)), ('job:a',))
+        run = next(b for b in result.bookings if b.stage == 'run')
+        self.assertEqual(run.segments[0].start, dt(day=19, hour=10))
 
 if __name__ == '__main__':
     unittest.main()

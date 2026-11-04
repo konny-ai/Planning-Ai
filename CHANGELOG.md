@@ -18,8 +18,10 @@ audit che rifiuta nuove prenotazioni per esse e KPI che ne usano il
 completamento. Le **scadenze promesse dai fornitori** (`external_end`) non hanno fase né
 prenotazione: un successore FS non può avviare la lavorazione prima della fine
 dichiarata più il lag (l'attrezzaggio può anticiparla); l'audit verifica lo
-stesso vincolo e SS da un fornitore è rifiutato. Restano rifiutati inizi fissi
-e modalità backward.
+stesso vincolo e SS da un fornitore è rifiutato. Gli **inizi fissi** (`fixed_start`) ancorano la lavorazione a
+quell'istante (l'attrezzaggio deve concludersi prima, altrimenti il piano
+fallisce in modo esplicito) e l'audit verifica l'ancoraggio; `fixed_alternative`
+restringe le macchine ammesse. Resta rifiutata la modalità backward.
 
 ## Non rilasciato — assistente conversazionale (ramo feat/cliente-assistente-chat-v2)
 

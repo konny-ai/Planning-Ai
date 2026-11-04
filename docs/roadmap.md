@@ -116,6 +116,7 @@ Il confronto `integrations/factory-export/tools/compare_bench.py` può ora emett
   reinserimento nella ricerca di sequenza, sempre auditate.
 - [x] Fasi già completate come storico nello scheduler a due stadi (stato macchina, precedenze, audit, KPI).
 - [x] Scadenze fornitore (external_end) come vincolo FS sulle fasi successive nello scheduler a due stadi.
+- [x] Inizi fissi (fixed_start) nello scheduler a due stadi, con audit dell'ancoraggio.
 - [ ] Rendere completo lo scheduler setup/run: sequenza macchina ottimizzata,
   congelamenti/consuntivi, tutti i vincoli di dominio e adapter ERP.
   Il piano di stage e' tecnico e non pubblicabile in Factory (#53).

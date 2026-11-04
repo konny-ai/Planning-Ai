@@ -72,7 +72,8 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
     and start before material arrives; run starts after release/dependencies.
     Setup never overlaps the preceding run on the same machine. Fully intact
     one-segment frozen stages can be pinned; partial WIP still fails closed.
-    Supplier milestones (external_end) take no phase or booking; an FS
+    A run with fixed_start is pinned to that instant (setup must
+    finish before it, otherwise the plan fails closed). Supplier milestones (external_end) take no phase or booking; an FS
     successor cannot start its run before the stated end plus lag.
     Already completed phases are history: they hold no booking, satisfy
     their successors' precedences and advance the observed machine state.
@@ -89,11 +90,11 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
         raise ValidationError(['ordered canonical phases must correspond exactly to compiled run tasks '
                                '(supplier milestones take no phase)'])
     done = {pid for pid, t in tasks.items() if t.completed_at is not None}
-    if any((t.external_end is None and t.mode != 'forward') or t.fixed_start is not None or t.fixed_alternative is not None
+    if any((t.external_end is None and t.mode != 'forward') or t.fixed_alternative is not None
            or (t.external_end is None and t.completed_at is None and t.duration_seconds <= 0)
            for t in tasks.values()):
         raise ValidationError(['staged setup planner currently requires active, unfixed forward run tasks '
-                               '(already completed tasks are accepted as history)'])
+                               '(completed tasks are history; fixed_start is pinned)'])
     # A completed phase really ran: it updates the observed machine state, so it
     # must come before every still-active phase on the same machine.
     seen_active = set()
@@ -136,6 +137,8 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
         segment = booking.segments[0]
         if segment.start < s.start or segment.end > s.end or segment.seconds <= 0:
             raise ValidationError([f'{key}: frozen stage outside current horizon'])
+        if key[1] == 'run' and tasks[booking.phase_id].fixed_start is not None:
+            raise ValidationError([f'{key}: frozen run and fixed_start are mutually exclusive'])
         frozen[key] = booking
 
     def stage_pin(pid: str, kind: str, alternatives: tuple[Alternative, ...]):
@@ -208,7 +211,8 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
             release=max(task.release, floors.get(pid, task.release)),
             due=task.due, priority=task.priority, mode='forward',
             splittable=task.splittable and (pid, 'run') not in frozen,
-            **stage_pin(pid, 'run', run_alts),
+            **(stage_pin(pid, 'run', run_alts) if (pid, 'run') in frozen
+               else ({'fixed_start': task.fixed_start} if task.fixed_start is not None else {})),
         ))
         mapping.append((f'job:{run_id}', pid, 'run'))
         machine_prev[phase.machine_id] = run_id
