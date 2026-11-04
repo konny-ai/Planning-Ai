@@ -1,5 +1,16 @@
 # Changelog
 
+## Non rilasciato — backward nella pipeline materiali
+
+`plan_materials_and_setup_stages` (e le varianti WIP residuo e blocchi attivi)
+accettano `backward=True` e `sequence_objective='delivery'|'setup'|'gap'`: dopo
+allocazione e audit dei materiali applicano l'opzione A (lavorazioni al più
+tardi, setup subito prima), con ricerca di sequenza opzionale sul piano
+backward. Si ritarda soltanto, quindi la disponibilita' dei materiali resta
+garantita (verificato esplicitamente); le prenotazioni congelate non sono ancora
+supportate in backward e vengono rifiutate. `MaterialStagedPlan` espone la
+sequenza usata (`machine_sequence`) e il risultato backward con i gap.
+
 ## Non rilasciato — ricerca di sequenza sul piano backward
 
 `optimize_backward_sequence` e `setup-stages --backward --objective delivery|setup|gap`
