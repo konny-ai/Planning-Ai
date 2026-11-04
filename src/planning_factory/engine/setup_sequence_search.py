@@ -684,3 +684,70 @@ def plan_setup_stages_by_mode(s: Scenario, contract: SetupContract,
         forward_only, contract, machine_sequence, max_alternatives=max_alternatives,
         frozen_bookings=frozen_bookings, only=wanted)
     return ModeAwareResult(result, tuple(sorted(resolved.items())))
+
+
+@dataclass(frozen=True)
+class MultiStartSearch:
+    best: SequenceSearch
+    starts: tuple[tuple[str, ...], ...]          # every distinct start tried, in order
+    start_scores: tuple[tuple, ...]              # objective score reached from each start
+    best_start_index: int
+    evaluated: int                               # candidate plans, summed over all starts
+    rejected_starts: int                         # starts that were infeasible and skipped
+
+
+def optimize_setup_sequence_multistart(s: Scenario, contract: SetupContract, *,
+                                       objective: str, restarts: int = 3, seed: int = 0,
+                                       max_evaluations: int = 24, max_alternatives: int = 32,
+                                       neighbourhood: str = 'insertion') -> MultiStartSearch:
+    """Run the bounded local search from several deterministic starts, keep the best.
+
+    Starts: due-date order, state-grouped order, then ``restarts`` perturbations of
+    the due-date order (a few random swaps of two jobs on the same machine, from
+    ``random.Random(seed)``). Infeasible starts are skipped. Every candidate in
+    every search is re-planned and audited; ties keep the earliest start. The cost
+    is at most (2 + restarts) searches of ``max_evaluations`` each. No claim of
+    global optimality.
+    """
+    import random
+    if type(restarts) is not int or not 0 <= restarts <= 8:
+        raise ValueError('restarts must be an integer between 0 and 8')
+    if type(seed) is not int:
+        raise ValueError('seed must be an integer')
+    _score(SequenceMetrics(0, 0, 0, 0), objective)
+    edd = default_machine_sequence(s)
+    machine_by_task = {p.id: p.machine_id for p in contract.phases}
+    starts = [edd]
+    grouped = state_grouped_sequence(s, contract, edd)
+    if grouped != edd:
+        starts.append(grouped)
+    rng = random.Random(seed)
+    for _ in range(restarts):
+        order = list(edd)
+        for _ in range(3):
+            machine = rng.choice(sorted(set(machine_by_task.values())))
+            slots = [i for i, tid in enumerate(order) if machine_by_task[tid] == machine]
+            if len(slots) >= 2:
+                a, b = rng.sample(slots, 2)
+                order[a], order[b] = order[b], order[a]
+        if tuple(order) not in starts:
+            starts.append(tuple(order))
+    results, scores, kept, rejected, evaluated = [], [], [], 0, 0
+    for start in starts:
+        try:
+            found = optimize_setup_sequence(s, contract, start, objective=objective,
+                                            max_evaluations=max_evaluations,
+                                            max_alternatives=max_alternatives,
+                                            neighbourhood=neighbourhood)
+        except ValidationError:
+            rejected += 1
+            continue
+        results.append(found)
+        kept.append(start)
+        scores.append(_score(found.selected, objective))
+        evaluated += found.evaluated
+    if not results:
+        raise ValidationError(['no feasible start order'])
+    best_index = min(range(len(results)), key=lambda i: (scores[i], i))
+    return MultiStartSearch(results[best_index], tuple(kept), tuple(scores),
+                            best_index, evaluated, rejected)

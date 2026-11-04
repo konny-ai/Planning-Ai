@@ -249,3 +249,8 @@ e rilasci dei setup), confronta esattamente le prenotazioni e rilancia l'audit.
 le barre di attrezzaggio e lavorazione per risorsa, le prenotazioni, i KPI, la
 distanza attrezzaggio→lavorazione del backward, le fasi non pianificate e le
 violazioni dell'audit.
+
+`--objective delivery|setup|flow --restarts N --seed S` (N da 0 a 8, solo ricerca in
+avanti) ripete la ricerca da piu' partenze deterministiche (ordine per scadenza, per
+stato, N perturbazioni con seme fisso) e tiene la migliore; il report riporta
+`multistart`. Con `--backward`, `--task-modes` o `--partial` l'opzione e' rifiutata.

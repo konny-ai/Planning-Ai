@@ -374,3 +374,27 @@ class TaskModesInStagedPlanningTests(unittest.TestCase):
                      settings=Settings(auto_rule='slack'))
         with self.assertRaisesRegex(ValidationError, "'slack' is not supported"):
             plan_setup_stages_by_mode(slack, three(), seq)
+
+
+class MultiStartTests(unittest.TestCase):
+    def test_multistart_is_deterministic_and_never_worse_than_single_start(self):
+        from planning_factory.engine.setup_sequence_search import optimize_setup_sequence_multistart
+        s, c = base([op('a'), op('b'), op('c')]), three()
+        single = optimize_setup_sequence(s, c, default_machine_sequence(s), objective='setup',
+                                         max_evaluations=6)
+        multi = optimize_setup_sequence_multistart(s, c, objective='setup', restarts=3, seed=7,
+                                                   max_evaluations=6)
+        self.assertLessEqual(multi.best.selected.setup_seconds, single.selected.setup_seconds)
+        self.assertGreaterEqual(len(multi.starts), 2)
+        self.assertEqual(multi.start_scores[multi.best_start_index], min(multi.start_scores))
+        self.assertEqual(multi, optimize_setup_sequence_multistart(
+            s, c, objective='setup', restarts=3, seed=7, max_evaluations=6))
+        self.assertEqual(audit_stage_capacity(c, s, multi.best.sequence, multi.best.winner.bookings), ())
+
+    def test_multistart_validates_arguments(self):
+        from planning_factory.engine.setup_sequence_search import optimize_setup_sequence_multistart
+        s, c = base([op('a'), op('b'), op('c')]), three()
+        for bad in ({'restarts': 9}, {'restarts': -1}, {'restarts': 1.5}, {'seed': 'x'}, {'objective': 'gap'}):
+            kwargs = {'objective': 'setup', 'restarts': 1, **bad}
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                optimize_setup_sequence_multistart(s, c, **kwargs)

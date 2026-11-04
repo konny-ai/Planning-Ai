@@ -1,5 +1,15 @@
 # Changelog
 
+## Non rilasciato — ricerca di sequenza con partenze multiple
+
+`optimize_setup_sequence_multistart` / `setup-stages --objective ... --restarts N --seed S`:
+la ricerca locale parte dall'ordine per scadenza, da quello per stato e da N perturbazioni
+deterministiche (seme fisso) e tiene la migliore; le partenze infattibili sono saltate, ogni
+candidato e' ripianificato e auditato, a parita' vince la prima partenza. Costo al massimo
+(2 + N) ricerche da `--budget` valutazioni. Mai peggiore della ricerca da una sola partenza;
+nessuna garanzia di ottimalita'. Solo per la ricerca in avanti: con `--backward`,
+`--task-modes` o `--partial` l'opzione e' rifiutata (non ignorata). Il report ha `multistart`.
+
 ## Non rilasciato — report HTML del piano a stadi
 
 `setup-stages --html report.html` (anche con `--partial`, `--backward`, `--replay`) scrive

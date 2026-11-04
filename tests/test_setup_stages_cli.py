@@ -265,6 +265,27 @@ class SetupStagesCliTests(unittest.TestCase):
             self.assertNotEqual(code, 0)
             self.assertIn('--partial can only be combined', err.getvalue())
 
+    def test_restarts_run_extra_starts_and_report_them(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src, con = self._files(root)
+            out = root / 'stages.json'
+            code, _ = run('setup-stages', str(src), str(con), '-o', str(out), '--objective', 'setup',
+                          '--restarts', '3', '--seed', '5', '--budget', '6')
+            self.assertEqual(code, 0)
+            report = json.loads(out.read_text(encoding='utf-8'))
+            self.assertGreaterEqual(report['multistart']['starts'], 2)
+            self.assertEqual(report['multistart']['seed'], 5)
+            self.assertEqual(report['audit_violations'], [])
+            self.assertEqual(report['kpis']['setup_seconds'], 1800)
+            for argv, message in ((['--restarts', '2'], 'requires --objective'),
+                                  (['--objective', 'setup', '--restarts', '2', '--backward',
+                                    '--scenario-output', str(root / 's.json')], 'only available')):
+                with self.subTest(argv=argv), redirect_stderr(StringIO()) as err:
+                    code, _ = run('setup-stages', str(src), str(con), '-o', str(out), *argv)
+                self.assertNotEqual(code, 0)
+                self.assertIn(message, err.getvalue())
+
     def test_refuses_to_overwrite_inputs(self):
         with TemporaryDirectory() as tmp:
             src, con = self._files(Path(tmp))

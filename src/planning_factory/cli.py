@@ -121,6 +121,9 @@ def main(argv=None) -> int:
                         help='With --partial: comma-separated operation IDs to treat as having no candidate resource')
     stages.add_argument('--html', help='Offline HTML report of the stage plan (Gantt, gaps, unplanned phases, audit)')
     stages.add_argument('--scenario-output', help='Scenario JSON with the derived releases of --just-in-time-tail')
+    stages.add_argument('--restarts', type=int, default=0,
+                        help='With --objective (forward search): extra deterministic perturbed starts, 0..8; also tries the state-grouped start')
+    stages.add_argument('--seed', type=int, default=0, help='Seed of the perturbed starts')
     stages.add_argument('--budget', type=int, default=24, help='Sequence evaluations, 1..256')
     stages.add_argument('--max-alternatives', type=int, default=32)
     setups = sub.add_parser('audit-setups', help='Audit explicit sequence-changeover rules against a plan')
@@ -384,6 +387,11 @@ def main(argv=None) -> int:
                     sequence = candidate
                 except ValidationError:
                     pass  # infeasible grouping: keep the due-date order
+            if args.restarts and not args.objective:
+                raise ValidationError(['--restarts requires --objective'])
+            if args.restarts and (args.backward or args.task_modes or args.partial):
+                raise ValidationError(['--restarts is only available for the forward sequence search '
+                                       '(not with --backward, --task-modes or --partial)'])
             search = None
             backward_search = None
             if args.objective and args.backward:
@@ -393,6 +401,14 @@ def main(argv=None) -> int:
                     max_alternatives=args.max_alternatives, neighbourhood=args.neighbourhood)
                 sequence = backward_search.sequence
                 solution = backward_search.result.solution
+            elif args.objective and args.restarts:
+                from .engine.setup_sequence_search import optimize_setup_sequence_multistart
+                multi = optimize_setup_sequence_multistart(
+                    scenario, contract, objective=args.objective, restarts=args.restarts, seed=args.seed,
+                    max_evaluations=args.budget, max_alternatives=args.max_alternatives,
+                    neighbourhood=args.neighbourhood)
+                search = multi.best
+                solution, sequence = search.winner, search.sequence
             elif args.objective:
                 search = optimize_setup_sequence(
                     scenario, contract, sequence, objective=args.objective, max_evaluations=args.budget,
@@ -467,6 +483,10 @@ def main(argv=None) -> int:
                                     'baseline': backward_search.baseline.as_dict(),
                                     'baseline_gap_seconds': backward_search.baseline_gap_seconds,
                                     'selected_gap_seconds': backward_search.selected_gap_seconds}
+            if search is not None and args.restarts and not args.backward:
+                report['multistart'] = {'starts': len(multi.starts), 'best_start_index': multi.best_start_index,
+                                        'evaluated': multi.evaluated, 'rejected_starts': multi.rejected_starts,
+                                        'seed': args.seed}
             if search is not None:
                 report['search'] = {'objective': search.objective, 'evaluated': search.evaluated,
                                     'rejected': search.rejected, 'improved': search.improved,
