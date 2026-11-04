@@ -17,6 +17,27 @@ from .engine.setup_search import search_setup_alternatives
 from . import canonical_cli, workbook_cli
 
 
+def _write_stage_html(path, report, *, protected):
+    from .adapters.stage_report import stage_html_report
+    from .engine.setup_capacity import StageAllocation, StageBooking
+    from .domain.models import Interval
+    from .adapters.json_io import timestamp
+    target = Path(path).resolve()
+    if target in protected:
+        raise ValidationError(['--html must not overwrite an input or another output'])
+    bookings = tuple(StageBooking(
+        b['phase_id'], b['stage'],
+        tuple(Interval(timestamp(i['start']), timestamp(i['end'])) for i in b['segments']),
+        tuple(StageAllocation(a['resource_id'], a['occupancy_bps']) for a in b['allocations']))
+        for b in report['bookings'])
+    back = report.get('backward') or {}
+    Path(path).write_text(stage_html_report(
+        bookings, sequence=tuple(report.get('sequence', ())), kpis=report.get('kpis'),
+        unplanned=tuple(report.get('unplanned', ())),
+        setup_gaps=tuple(sorted((back.get('setup_gaps_seconds') or {}).items())),
+        audit_violations=tuple(report.get('audit_violations', ()))), encoding='utf-8')
+
+
 def _bookings_json(bookings):
     return [{'phase_id': b.phase_id, 'stage': b.stage,
              'segments': [{'start': i.start.isoformat(), 'end': i.end.isoformat()} for i in b.segments],
@@ -98,6 +119,7 @@ def main(argv=None) -> int:
                         help='ADR 006 option B: plan what has candidate resources and report the rest as not planned (NO_CANDIDATE, PREDECESSOR_UNPLANNED, NEST_MEMBER_UNPLANNED); may add --backward')
     stages.add_argument('--no-candidate', default='',
                         help='With --partial: comma-separated operation IDs to treat as having no candidate resource')
+    stages.add_argument('--html', help='Offline HTML report of the stage plan (Gantt, gaps, unplanned phases, audit)')
     stages.add_argument('--scenario-output', help='Scenario JSON with the derived releases of --just-in-time-tail')
     stages.add_argument('--budget', type=int, default=24, help='Sequence evaluations, 1..256')
     stages.add_argument('--max-alternatives', type=int, default=32)
@@ -313,6 +335,9 @@ def main(argv=None) -> int:
                             'setup_releases': {p: r.isoformat() for p, r in part.backward.setup_releases}}
                         Path(args.scenario_output).write_text(dumps(part.scenario), encoding='utf-8')
                 Path(args.output).write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+                if args.html:
+                    _write_stage_html(args.html, report, protected={Path(p).resolve() for p in (
+                        args.scenario, args.contract, args.output, args.scenario_output, args.replay) if p})
                 print(json.dumps({'planned': sorted({b['phase_id'] for b in report['bookings']}),
                                   'unplanned': report['unplanned'],
                                   'audit_violations': report['audit_violations']}, sort_keys=True))
@@ -337,6 +362,9 @@ def main(argv=None) -> int:
                           'audit_violations': list(violations),
                           'replay': {'matches_previous_bookings': matches, 'setup_releases': len(releases)}}
                 Path(args.output).write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+                if args.html:
+                    _write_stage_html(args.html, report, protected={Path(p).resolve() for p in (
+                        args.scenario, args.contract, args.output, args.scenario_output, args.replay) if p})
                 print(json.dumps({'replay_matches': matches, 'audit_violations': report['audit_violations']}, sort_keys=True))
                 return 0 if matches and not violations else 2
             sequence = (tuple(x for x in args.sequence.split(',') if x)
@@ -444,6 +472,9 @@ def main(argv=None) -> int:
                                     'rejected': search.rejected, 'improved': search.improved,
                                     'baseline': search.baseline.as_dict()}
             Path(args.output).write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+            if args.html:
+                _write_stage_html(args.html, report, protected={Path(p).resolve() for p in (
+                    args.scenario, args.contract, args.output, args.scenario_output, args.replay) if p})
             print(json.dumps({'sequence': report['sequence'], 'kpis': report['kpis'],
                               'audit_violations': report['audit_violations']}, sort_keys=True))
             return 0 if not violations else 2

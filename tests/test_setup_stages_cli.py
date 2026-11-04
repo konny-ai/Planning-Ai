@@ -285,3 +285,49 @@ def _three_spec():
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class StageHtmlReportTests(unittest.TestCase):
+    def test_html_report_for_plain_backward_and_partial_runs(self):
+        from planning_factory.domain.models import Dependency
+        from .helpers import dt
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            due = dt(day=23, hour=17)
+            ops = [op('a', due=due), op('x', due=due), op('c', predecessors=(Dependency('x', 'FS'),)), op('b', due=due)]
+            data = _three_spec()
+            data['phases'] = [dict(data['phases'][0], id=f'job:{n}') for n in 'abc']
+            src, con = root / 's.json', root / 'c.json'
+            from .test_setup_stage_scheduler import base
+            src.write_text(dumps(base(ops)), encoding='utf-8')
+            con.write_text(json.dumps(data), encoding='utf-8')
+            page, adj, out = root / 'r.html', root / 'adj.json', root / 'o.json'
+            code, _ = run('setup-stages', str(src), str(con), '-o', str(out), '--partial',
+                          '--no-candidate', 'x', '--backward', '--scenario-output', str(adj),
+                          '--html', str(page))
+            self.assertEqual(code, 0)
+            text = page.read_text(encoding='utf-8')
+            self.assertTrue(text.startswith('<!doctype html>'))
+            for needle in ('job:a', 'attrezzaggio', 'NO_CANDIDATE', 'PREDECESSOR_UNPLANNED',
+                           'Distanza attrezzaggio', 'nessuna violazione'):
+                self.assertIn(needle, text)
+            self.assertNotIn('<script', text)
+            with redirect_stderr(StringIO()) as err:       # never overwrite an input
+                code, _ = run('setup-stages', str(src), str(con), '-o', str(out), '--partial',
+                               '--no-candidate', 'x', '--html', str(src))
+            self.assertNotEqual(code, 0)
+            self.assertIn('--html must not overwrite', err.getvalue())
+
+    def test_html_escapes_untrusted_ids(self):
+        from planning_factory.adapters.stage_report import stage_html_report
+        from planning_factory.domain.models import Interval
+        from planning_factory.engine.setup_capacity import StageAllocation, StageBooking
+        from .helpers import dt
+        booking = StageBooking('<img src=x onerror=alert(1)>', 'run',
+                               (Interval(dt(hour=8), dt(hour=9)),), (StageAllocation('<b>m</b>', 10000),))
+        page = stage_html_report((booking,), unplanned=({'operation_id': '<script>', 'code': 'X', 'detail': '"&'},))
+        self.assertNotIn('<img src', page)
+        self.assertNotIn('<script>', page)
+        self.assertIn('&lt;script&gt;', page)
+        empty = stage_html_report(())
+        self.assertIn('<!doctype html>', empty)

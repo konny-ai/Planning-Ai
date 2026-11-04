@@ -1,5 +1,13 @@
 # Changelog
 
+## Non rilasciato — report HTML del piano a stadi
+
+`setup-stages --html report.html` (anche con `--partial`, `--backward`, `--replay`) scrive
+un report offline senza script: barre di attrezzaggio e lavorazione distinte per risorsa,
+prenotazioni, KPI, distanza attrezzaggio→lavorazione del backward, fasi non pianificate
+con codice e violazioni dell'audit. Ogni valore e' escapato (anche gli attributi dei
+suggerimenti) e il file non puo' sovrascrivere ingressi o altre uscite.
+
 ## Non rilasciato — prestazioni del backward
 
 Il backward richiedeva una ripianificazione per ogni tentativo: ora (1) il rilascio piu'

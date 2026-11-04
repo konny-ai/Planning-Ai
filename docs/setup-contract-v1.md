@@ -244,3 +244,8 @@ Per riprodurre un piano backward da soli file: `planning-factory setup-stages
 adj.json contratto.json -o replay.json --replay stadi.json` usa lo scenario
 esportato (`adj.json`) e il report precedente (`stadi.json`, che contiene sequenza
 e rilasci dei setup), confronta esattamente le prenotazioni e rilancia l'audit.
+
+`--html report.html` aggiunge un report offline (nessuno script, valori escapati) con
+le barre di attrezzaggio e lavorazione per risorsa, le prenotazioni, i KPI, la
+distanza attrezzaggio→lavorazione del backward, le fasi non pianificate e le
+violazioni dell'audit.
