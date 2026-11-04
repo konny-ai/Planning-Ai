@@ -1,5 +1,16 @@
 # Changelog
 
+## Non rilasciato — modalità per task nello scheduler a due stadi
+
+`plan_setup_stages_by_mode` / `setup-stages --task-modes --scenario-output ...`
+rispettano `mode` per task: `forward` resta il piu' presto possibile,
+`backward` riceve l'opzione A (lavorazione al piu' tardi, setup subito prima),
+`auto` diventa backward se la scadenza e' ad almeno `auto_backward_days` dall'inizio
+(regola `due_distance` del motore standard; la regola `slack` e' rifiutata). Un task
+backward senza scadenza fallisce in modo esplicito. Lo scheduler resta forward-only
+e lo scenario di ingresso non viene modificato. Non si combina con
+`--backward`, `--just-in-time-tail` o `--objective`.
+
 ## Non rilasciato — backward nella pipeline materiali
 
 `plan_materials_and_setup_stages` (e le varianti WIP residuo e blocchi attivi)

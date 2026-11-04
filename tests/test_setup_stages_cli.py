@@ -148,6 +148,39 @@ class SetupStagesCliTests(unittest.TestCase):
             self.assertNotEqual(code, 0)
             self.assertIn('use one of them', err.getvalue())
 
+    def test_task_modes_honours_per_task_backward(self):
+        from .helpers import dt
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            due = dt(day=23, hour=17)
+            src, con = self._files(root, [op('a', due=due), op('b', due=due),
+                                          op('c', due=due, mode='backward')])
+            out, adjusted = root / 'stages.json', root / 'adjusted.json'
+            with redirect_stderr(StringIO()):  # plain run rejects non-forward modes
+                code, _ = run('setup-stages', str(src), str(con), '-o', str(out))
+            self.assertNotEqual(code, 0)
+            with redirect_stderr(StringIO()):
+                code, _ = run('setup-stages', str(src), str(con), '-o', str(out), '--task-modes')
+            self.assertNotEqual(code, 0)  # needs --scenario-output
+            code, _ = run('setup-stages', str(src), str(con), '-o', str(out),
+                          '--sequence', 'job:a,job:b,job:c', '--task-modes',
+                          '--scenario-output', str(adjusted))
+            self.assertEqual(code, 0)
+            report = json.loads(out.read_text(encoding='utf-8'))
+            self.assertEqual(report['task_modes'], {'job:a': 'forward', 'job:b': 'forward', 'job:c': 'backward'})
+            self.assertEqual(report['audit_violations'], [])
+            self.assertEqual([d['phase_id'] for d in report['backward']['delayed_runs']], ['job:c'])
+
+    def test_task_modes_cannot_be_combined_with_other_policies(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src, con = self._files(root)
+            with redirect_stderr(StringIO()) as err:
+                code, _ = run('setup-stages', str(src), str(con), '-o', str(root / 'o.json'),
+                              '--task-modes', '--backward', '--scenario-output', str(root / 's.json'))
+            self.assertNotEqual(code, 0)
+            self.assertIn('cannot be combined', err.getvalue())
+
     def test_refuses_to_overwrite_inputs(self):
         with TemporaryDirectory() as tmp:
             src, con = self._files(Path(tmp))

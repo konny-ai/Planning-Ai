@@ -233,3 +233,9 @@ eventuali violazioni dell'audit indipendente (codice di uscita 2 se non vuote).
 Non scrive mai sugli ingressi e non accede a Factory. Con `--backward --scenario-output adj.json` (ADR 005, opzione A) le
 lavorazioni vanno al piu' tardi e ogni attrezzaggio subito prima della sua
 lavorazione; il report include i gap residui.
+
+Con `--task-modes --scenario-output adj.json` si rispetta `mode` per task:
+`backward` e `auto` (regola `due_distance`, backward se la scadenza e' ad almeno
+`auto_backward_days` dall'inizio) ricevono l'opzione A; i task `forward` restano
+il piu' presto possibile. Un task backward senza scadenza e la regola `slack`
+sono rifiutati. Il report riporta `task_modes` (modo risolto per fase).

@@ -83,6 +83,8 @@ def main(argv=None) -> int:
                         help='EXPERIMENTAL (ADR 005, not approved): delay terminal runs by their delivery slack; needs --scenario-output')
     stages.add_argument('--backward', action='store_true',
                         help='ADR 005 option A: runs as late as possible, each setup right before its run, machine sequence fixed first; needs --scenario-output')
+    stages.add_argument('--task-modes', action='store_true',
+                        help='Honour per-task mode forward/backward/auto (auto: due_distance rule); backward tasks get ADR 005 option A; needs --scenario-output')
     stages.add_argument('--scenario-output', help='Scenario JSON with the derived releases of --just-in-time-tail')
     stages.add_argument('--budget', type=int, default=24, help='Sequence evaluations, 1..256')
     stages.add_argument('--max-alternatives', type=int, default=32)
@@ -296,10 +298,25 @@ def main(argv=None) -> int:
                     scenario, contract, sequence, objective=args.objective, max_evaluations=args.budget,
                     max_alternatives=args.max_alternatives, neighbourhood=args.neighbourhood)
                 solution, sequence = search.winner, search.sequence
-            else:
+            elif not args.task_modes:
                 solution = schedule_setup_stages(scenario, contract, sequence,
                                                  max_alternatives=args.max_alternatives)
-            audit_scenario, jit, back = scenario, None, None
+            audit_scenario, jit, back, modes = scenario, None, None, None
+            if args.task_modes:
+                from .engine.setup_sequence_search import plan_setup_stages_by_mode
+                if args.backward or args.just_in_time_tail or args.objective:
+                    raise ValidationError(['--task-modes cannot be combined with --backward, '
+                                           '--just-in-time-tail or --objective'])
+                if not args.scenario_output:
+                    raise ValidationError(['--task-modes requires --scenario-output'])
+                protected = {Path(args.scenario).resolve(), Path(args.contract).resolve(), Path(args.output).resolve()}
+                if Path(args.scenario_output).resolve() in protected:
+                    raise ValidationError(['--scenario-output must be a distinct new file'])
+                aware = plan_setup_stages_by_mode(scenario, contract, sequence,
+                                                  max_alternatives=args.max_alternatives)
+                back, modes = aware.result, dict(aware.modes)
+                solution, audit_scenario = back.solution, back.scenario
+                Path(args.scenario_output).write_text(dumps(audit_scenario), encoding='utf-8')
             if args.backward:
                 from .engine.setup_sequence_search import backward_setup_before_run
                 if args.just_in_time_tail:
@@ -335,6 +352,8 @@ def main(argv=None) -> int:
                 'kpis': sequence_metrics(audit_scenario, solution).as_dict(),
                 'audit_violations': list(violations),
             }
+            if modes is not None:
+                report['task_modes'] = modes
             if back is not None:
                 report['backward'] = {
                     'option': 'A', 'delayed_runs': [{'phase_id': p, 'seconds': s} for p, s in back.delayed_runs],

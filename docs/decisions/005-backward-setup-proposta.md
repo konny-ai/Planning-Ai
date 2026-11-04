@@ -72,3 +72,7 @@ prima del piano in avanti e non accede a Factory. La sequenza e' un dato fissato
 con `--objective` (con `--backward` ogni candidato e' valutato sul proprio
 piano backward; obiettivi `delivery`, `setup`, `gap`) o fornirla con `--sequence`; i rilasci derivati dei setup sono
 riportati nel report, non nello scenario esportato.
+
+Aggiornamento: con `--task-modes` (`plan_setup_stages_by_mode`) i task con
+`mode` backward/auto nello scenario di ingresso sono accettati e ricevono
+l'opzione A (solo quelli che la richiedono; `auto` segue la regola `due_distance`).

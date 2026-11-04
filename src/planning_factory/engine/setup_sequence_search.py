@@ -293,7 +293,8 @@ class JustInTimeResult:
 def just_in_time_tail(s: Scenario, contract: SetupContract,
                       machine_sequence: tuple[str, ...], *,
                       max_alternatives: int = 32,
-                      frozen_bookings: tuple = ()) -> JustInTimeResult:
+                      frozen_bookings: tuple = (),
+                      only: frozenset | None = None) -> JustInTimeResult:
     """EXPERIMENTAL, opt-in, not an approved rule (see ADR 005, option B-like).
 
     Delays the production run of a task by the room it has before anything
@@ -348,6 +349,8 @@ def just_in_time_tail(s: Scenario, contract: SetupContract,
         task = tasks[pid]
         if pid in frozen_runs:
             continue  # a frozen run is never moved
+        if only is not None and pid not in only:
+            continue  # this task did not ask for backward placement
         run, limit = room(pid)
         if limit is None or limit.total_seconds() <= 0:
             continue
@@ -404,7 +407,8 @@ class BackwardSetupResult:
 def backward_setup_before_run(s: Scenario, contract: SetupContract,
                               machine_sequence: tuple[str, ...], *,
                               max_alternatives: int = 32,
-                              frozen_bookings: tuple = ()) -> BackwardSetupResult:
+                              frozen_bookings: tuple = (),
+                              only: frozenset | None = None) -> BackwardSetupResult:
     """ADR 005, option A (chosen by the client): runs as late as possible and
     every needed setup immediately before its run, with the machine sequence
     fixed beforehand.
@@ -418,7 +422,7 @@ def backward_setup_before_run(s: Scenario, contract: SetupContract,
     """
     first = just_in_time_tail(s, contract, machine_sequence,
                               max_alternatives=max_alternatives,
-                              frozen_bookings=frozen_bookings)
+                              frozen_bookings=frozen_bookings, only=only)
     frozen_setups = {b.phase_id for b in frozen_bookings if b.stage == 'setup'}
     current_s, current, metrics = first.scenario, first.solution, first.selected
     releases = {}
@@ -428,6 +432,8 @@ def backward_setup_before_run(s: Scenario, contract: SetupContract,
         run = next((b for b in current.bookings
                     if b.phase_id == pid and b.stage == 'run'), None)
         if setup is None or run is None or pid in frozen_setups:
+            continue
+        if only is not None and pid not in only:
             continue
         gap = run.segments[0].start - setup.segments[-1].end
         if gap.total_seconds() <= 0:
@@ -568,3 +574,52 @@ def optimize_backward_sequence(s: Scenario, contract: SetupContract,
     return BackwardSequenceSearch(objective, best_result, current, baseline, baseline_gap,
                                   best_result.selected, best_gap, evaluated, rejected,
                                   current != initial_sequence)
+
+
+@dataclass(frozen=True)
+class ModeAwareResult:
+    result: BackwardSetupResult
+    modes: tuple[tuple[str, str], ...]   # resolved (phase id, forward|backward)
+
+
+def plan_setup_stages_by_mode(s: Scenario, contract: SetupContract,
+                              machine_sequence: tuple[str, ...], *,
+                              max_alternatives: int = 32,
+                              frozen_bookings: tuple = ()) -> ModeAwareResult:
+    """Honour per-task ``mode`` (forward / backward / auto) in the staged planner.
+
+    The staged scheduler itself stays forward-only. Each task's mode is resolved
+    like the standard engine: ``backward`` stays, ``auto`` becomes backward when
+    its due date is at least ``auto_backward_days`` after the horizon start
+    (rule ``due_distance``; the ``slack`` rule needs capacity-free estimates
+    and is rejected), otherwise forward. Tasks resolved to backward get ADR 005
+    option A (run as late as possible, setup right before it); forward tasks
+    stay as soon as possible. A backward task needs a due date, otherwise the
+    call fails closed instead of drifting to the horizon end. The input
+    scenario is never modified.
+    """
+    tasks, _, _ = compile_tasks(s)
+    if s.settings.auto_rule != 'due_distance' and any(
+            t.mode == 'auto' for t in tasks.values()):
+        raise ValidationError(["auto mode with auto_rule 'slack' is not supported in staged planning"])
+    horizon = s.start.astimezone(UTC)
+    resolved = {}
+    for pid, task in tasks.items():
+        if task.external_end is not None or task.completed_at is not None:
+            continue
+        mode = task.mode
+        if mode == 'auto':
+            mode = ('backward' if task.due is not None and
+                    task.due >= horizon + timedelta(days=s.settings.auto_backward_days)
+                    else 'forward')
+        if mode == 'backward' and task.due is None:
+            raise ValidationError([f'{pid}: backward task needs a due date in staged planning'])
+        resolved[pid] = mode
+    forward_only = replace(
+        s, settings=replace(s.settings, mode='forward'),
+        operations=tuple(replace(o, mode='forward') for o in s.operations))
+    wanted = frozenset(pid for pid, mode in resolved.items() if mode == 'backward')
+    result = backward_setup_before_run(
+        forward_only, contract, machine_sequence, max_alternatives=max_alternatives,
+        frozen_bookings=frozen_bookings, only=wanted)
+    return ModeAwareResult(result, tuple(sorted(resolved.items())))

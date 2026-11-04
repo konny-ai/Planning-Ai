@@ -330,3 +330,47 @@ class BackwardSequenceSearchTests(unittest.TestCase):
             optimize_backward_sequence(s, c, objective='setup', max_evaluations=100)
         with self.assertRaises(ValueError):
             optimize_backward_sequence(s, c, objective='setup', neighbourhood='x')
+
+
+class TaskModesInStagedPlanningTests(unittest.TestCase):
+    def test_only_backward_tasks_are_delayed(self):
+        from planning_factory.engine.setup_sequence_search import plan_setup_stages_by_mode
+        due = dt(day=23, hour=17)
+        s = base([op('a', due=due), op('b', due=due), op('c', due=due, mode='backward')])
+        c = three()
+        seq = ('job:a', 'job:b', 'job:c')
+        found = plan_setup_stages_by_mode(s, c, seq)
+        self.assertEqual(dict(found.modes), {'job:a': 'forward', 'job:b': 'forward', 'job:c': 'backward'})
+        forward = {(b.phase_id, b.stage): b for b in schedule_setup_stages(
+            base([op('a', due=due), op('b', due=due), op('c', due=due)]), c, seq).bookings}
+        got = {(b.phase_id, b.stage): b for b in found.result.solution.bookings}
+        for key in (('job:a', 'run'), ('job:a', 'setup'), ('job:b', 'run'), ('job:b', 'setup')):
+            self.assertEqual(got[key], forward[key])      # forward tasks untouched
+        self.assertGreater(got[('job:c', 'run')].segments[0].start,
+                           forward[('job:c', 'run')].segments[0].start)
+        self.assertEqual(found.result.selected.late_orders, 0)
+        self.assertEqual(audit_stage_capacity(c, found.result.scenario, seq,
+                                              found.result.solution.bookings), ())
+        self.assertEqual(s.operations[2].mode, 'backward')   # input untouched
+        self.assertEqual(s.settings.mode, 'forward')
+
+    def test_auto_follows_the_due_distance_rule(self):
+        from planning_factory.engine.setup_sequence_search import plan_setup_stages_by_mode
+        near = dt(day=21, hour=17)       # 2 days from start: below the 10-day threshold
+        far = dt(day=31, hour=17)        # 12 days: backward
+        s = base([op('a', due=near, mode='auto'), op('b', due=far, mode='auto'), op('c')],
+                 end=dt(day=31, hour=23))
+        found = plan_setup_stages_by_mode(s, three(), ('job:a', 'job:b', 'job:c'))
+        self.assertEqual(dict(found.modes)['job:a'], 'forward')
+        self.assertEqual(dict(found.modes)['job:b'], 'backward')
+
+    def test_fail_closed_cases(self):
+        from planning_factory.domain.models import Settings
+        from planning_factory.engine.setup_sequence_search import plan_setup_stages_by_mode
+        seq = ('job:a', 'job:b', 'job:c')
+        with self.assertRaisesRegex(ValidationError, 'needs a due date'):
+            plan_setup_stages_by_mode(base([op('a'), op('b', mode='backward'), op('c')]), three(), seq)
+        slack = base([op('a', mode='auto', due=dt(day=23)), op('b'), op('c')],
+                     settings=Settings(auto_rule='slack'))
+        with self.assertRaisesRegex(ValidationError, "'slack' is not supported"):
+            plan_setup_stages_by_mode(slack, three(), seq)
