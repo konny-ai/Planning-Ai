@@ -14,6 +14,14 @@ esatta con piano completo su 250 scenari casuali, su 150 scenari a stadi e sui c
 completate e inizi fissi; stesso hash delle prenotazioni sulle misure: 80 fasi 11,4 s -> 8,9 s,
 160 fasi 32,3 s -> 22,6 s. Il resto del tempo e' nel calcolo degli intervalli liberi.
 
+## Non rilasciato — serializzazione piu' veloce (digest identici)
+
+`primitive()` (usata da `dumps` e da `scenario_digest`) ha un percorso rapido per i tipi base esatti e
+calcola una volta per classe i nomi dei campi; tutto il resto passa dal percorso di prima. L'output e'
+identico byte per byte (test contro l'implementazione originale congelata in
+`tests/reference_json_io.py`, su 340 oggetti tra scenari, piani e valori limite), quindi i digest gia'
+registrati restano validi. Backward: 80 fasi 5,7 s -> 4,8 s, 160 fasi 13,6 s -> 12,7 s.
+
 ## Non rilasciato — tempi liberi aggiornati in modo incrementale
 
 `bundle_free` con cache non ricalcola piu' da zero i tempi liberi di una risorsa a ogni nuova

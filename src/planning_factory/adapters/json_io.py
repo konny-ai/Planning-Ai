@@ -16,7 +16,23 @@ _OMITTED_DEFAULTS = {'external_end': None, 'preferred_alternative': None, 'max_l
                      'efficiency_bp': 10000}
 
 
+_SCALARS = frozenset((str, int, float, bool, type(None)))
+_DATACLASS_FIELDS: dict = {}   # class -> ((name, omitted default or _KEEP), ...)
+_KEEP = object()
+
+
+def _field_plan(cls):
+    plan = _DATACLASS_FIELDS.get(cls)
+    if plan is None:
+        plan = _DATACLASS_FIELDS[cls] = tuple(
+            (f.name, _OMITTED_DEFAULTS.get(f.name, _KEEP)) for f in fields(cls))
+    return plan
+
+
 def primitive(value):
+    kind = type(value)
+    if kind in _SCALARS:          # exact builtin scalars: the generic path would return them unchanged
+        return value
     if isinstance(value, datetime):
         instant(value, 'datetime')
         return value.astimezone(UTC).isoformat().replace('+00:00', 'Z')
@@ -24,9 +40,13 @@ def primitive(value):
         return value.isoformat()
     if is_dataclass(value):
         # Preserve existing v1 scenario digests and golden fixtures when unused.
-        return {f.name: primitive(getattr(value, f.name)) for f in fields(value)
-                if not (f.name in _OMITTED_DEFAULTS and getattr(value, f.name) == _OMITTED_DEFAULTS[f.name]
-                        and type(getattr(value, f.name)) is type(_OMITTED_DEFAULTS[f.name]))}
+        result = {}
+        for name, omitted in _field_plan(kind):
+            item = getattr(value, name)
+            if omitted is not _KEEP and item == omitted and type(item) is type(omitted):
+                continue
+            result[name] = primitive(item)
+        return result
     if isinstance(value, (tuple, list)):
         return [primitive(x) for x in value]
     if isinstance(value, dict):
