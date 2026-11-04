@@ -26,6 +26,9 @@ from planning_factory.engine.material_stage_pipeline import (
 )
 
 MAX_SPEC_BYTES = 1024 * 1024
+MAX_QUANTITY_EXPONENT = 18
+MAX_QUANTITY_DIGITS = 28
+MIN_YEAR, MAX_YEAR = 1970, 2200
 
 
 @dataclass(frozen=True)
@@ -81,6 +84,11 @@ def _qty(value, label):
         raise ValidationError([f"{label}: invalid decimal"]) from None
     if not number.is_finite() or number<=0:
         raise ValidationError([f"{label}: finite positive quantity required"])
+    # Bounded magnitude and precision: absurd exponents ("1e999999999") would overflow the decimal
+    # context later, in the middle of planning, instead of being rejected here.
+    if abs(number.adjusted())>MAX_QUANTITY_EXPONENT or len(number.as_tuple().digits)>MAX_QUANTITY_DIGITS:
+        raise ValidationError([f"{label}: quantity out of range (at most 1e{MAX_QUANTITY_EXPONENT} "
+                               f"and {MAX_QUANTITY_DIGITS} significant digits)"])
     return number
 
 
@@ -91,6 +99,8 @@ def _instant(value, label):
         raise ValidationError([f"{label}: ISO8601 timestamp with UTC offset required"]) from None
     if instant is None or instant.microsecond:
         raise ValidationError([f"{label}: non-null timestamp at second precision required"])
+    if not MIN_YEAR<=instant.year<=MAX_YEAR:   # arithmetic on dates near year 1 or 9999 overflows
+        raise ValidationError([f"{label}: year must be between {MIN_YEAR} and {MAX_YEAR}"])
     return instant
 
 

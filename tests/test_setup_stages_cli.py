@@ -188,6 +188,30 @@ class SetupStagesCliTests(unittest.TestCase):
                 self.assertEqual(code, 1)
                 self.assertIn('written by setup-stages', err.getvalue())
 
+    def test_replay_rejects_hostile_report_contents_with_a_clear_message(self):
+        # Found by fuzzing the replay report: wrong types escaped as AttributeError / unhashable type.
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src, con = self._files(root)
+            good = {'sequence': ['job:a'], 'bookings': [], 'backward': {'setup_releases': {}}}
+            cases = {'releases-none': {'backward': {'setup_releases': None}},
+                     'releases-list': {'backward': {'setup_releases': []}},
+                     'releases-text': {'backward': {'setup_releases': 'x'}},
+                     'release-not-a-date': {'backward': {'setup_releases': {'job:a': 'yesterday'}}},
+                     'release-no-offset': {'backward': {'setup_releases': {'job:a': '2026-10-20T08:00:00'}}},
+                     'release-number': {'backward': {'setup_releases': {'job:a': 5}}},
+                     'sequence-item-list': {'sequence': [[]]},
+                     'sequence-item-dict': {'sequence': [{}]},
+                     'backward-not-an-object': {'backward': 7}}
+            for name, change in cases.items():
+                (root / 'rep.json').write_text(json.dumps({**good, **change}), encoding='utf-8')
+                with self.subTest(name=name), redirect_stderr(StringIO()) as err:
+                    code, _ = run('setup-stages', str(src), str(con), '-o', str(root / 'o.json'),
+                                  '--replay', str(root / 'rep.json'))
+                self.assertEqual(code, 1)
+                self.assertTrue(any(w in err.getvalue() for w in ('--replay needs', 'ISO 8601', 'UTC offset')),
+                                err.getvalue())
+
     def test_replay_rejects_other_options_and_self_overwrite(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)

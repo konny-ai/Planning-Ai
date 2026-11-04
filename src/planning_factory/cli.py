@@ -400,16 +400,24 @@ def main(argv=None) -> int:
                 if any((args.backward, args.just_in_time_tail, args.task_modes, args.objective, args.sequence)):
                     raise ValidationError(['--replay cannot be combined with other planning options'])
                 previous = json.loads(Path(args.replay).read_text(encoding='utf-8'))
+                backward_part = previous.get('backward', {}) if isinstance(previous, dict) else None
+                stored = backward_part.get('setup_releases', {}) if isinstance(backward_part, dict) else None
                 if (not isinstance(previous, dict) or not isinstance(previous.get('sequence'), list)
+                        or not all(isinstance(x, str) for x in previous['sequence'])
                         or not isinstance(previous.get('bookings'), list)
-                        or not isinstance(previous.get('backward', {}), dict)):
-                    raise ValidationError(['--replay needs a report written by setup-stages '
-                                           '(with sequence and bookings)'])
+                        or not isinstance(backward_part, dict) or not isinstance(stored, dict)
+                        or not all(isinstance(k, str) and isinstance(v, str) for k, v in stored.items())):
+                    raise ValidationError(['--replay needs a report written by setup-stages (a sequence of '
+                                           'IDs, bookings, and setup_releases mapping IDs to timestamps)'])
                 if Path(args.output).resolve() == Path(args.replay).resolve():
                     raise ValidationError(['--replay output must not overwrite the report being replayed'])
                 sequence = tuple(previous['sequence'])
-                releases = {pid: datetime.fromisoformat(v) for pid, v in
-                            previous.get('backward', {}).get('setup_releases', {}).items()}
+                try:
+                    releases = {pid: datetime.fromisoformat(v) for pid, v in stored.items()}
+                except ValueError:
+                    raise ValidationError(['--replay: setup_releases must be ISO 8601 timestamps']) from None
+                if any(v.tzinfo is None for v in releases.values()):
+                    raise ValidationError(['--replay: setup_releases need a UTC offset'])
                 solution = schedule_setup_stages(scenario, contract, sequence,
                                                  max_alternatives=args.max_alternatives,
                                                  setup_releases=releases)
@@ -704,6 +712,6 @@ def main(argv=None) -> int:
             summary['time_limit_reached'] = searched.time_limit_reached
         print(json.dumps(summary))
         return 2 if result.unscheduled else 0
-    except (ValidationError, OSError, KeyError, TypeError, ValueError) as exc:
+    except (ValidationError, OSError, KeyError, TypeError, ValueError, ArithmeticError) as exc:   # incl. OverflowError, decimal errors
         print(json.dumps({'error': str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 1

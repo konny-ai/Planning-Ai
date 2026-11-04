@@ -84,6 +84,32 @@ class StagedPlanCliTests(unittest.TestCase):
                 self.assertNotEqual(run('staged-plan', str(src), str(sp), '-o', str(src))[0], 0)
             self.assertIn('must not overwrite', err.getvalue())
 
+    def test_hostile_spec_values_give_a_clean_error_and_no_report(self):
+        for changes in ({'quantity': '1e999999999'}, {'available_at': '9999-12-31T23:59:59Z'}):
+            with TemporaryDirectory() as tmp, self.subTest(changes=changes):
+                root = Path(tmp)
+                supply = {'id': 'sheet', 'item_id': 'SHEET', 'quantity': '2', 'available_at': '2026-10-20T09:00:00Z', **changes}
+                src, sp = self.files(root, supplies=[supply])
+                out = root / 'plan.json'
+                with redirect_stderr(StringIO()) as err:
+                    code, _ = run('staged-plan', str(src), str(sp), '-o', str(out))
+                self.assertEqual(code, 1)
+                self.assertIn('"error"', err.getvalue())
+                self.assertNotIn('Traceback', err.getvalue())
+                self.assertFalse(out.exists())
+
+    def test_arithmetic_errors_are_reported_as_clean_errors_by_the_cli(self):
+        from unittest import mock
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src, sp = self.files(root)
+            with mock.patch('planning_factory.adapters.staged_file.calculate_staged_preview',
+                            side_effect=OverflowError('date value out of range')), \
+                    redirect_stderr(StringIO()) as err:
+                code, _ = run('staged-plan', str(src), str(sp), '-o', str(root / 'plan.json'))
+            self.assertEqual(code, 1)
+            self.assertIn('date value out of range', err.getvalue())
+
 
 if __name__ == '__main__':
     unittest.main()

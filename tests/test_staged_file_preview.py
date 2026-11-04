@@ -88,6 +88,22 @@ class StagedFilePreviewTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValidationError,message):
                     load(bad)
 
+    def test_hostile_quantities_and_dates_are_rejected_not_overflowed(self):
+        # Found by fuzzing every field with hostile values: these escaped as raw Python exceptions.
+        supply={"id":"sheet","item_id":"SHEET","quantity":"2","available_at":"2026-10-20T09:00:00Z"}
+        def spec_with(**changes):
+            return {**self.raw,"stock":{"accounting":"net","supplies":[{**supply,**changes}]}}
+        for changes,message in (({"quantity":"1e999999999"},"out of range"),
+                                ({"quantity":"1e-999999999"},"out of range"),
+                                ({"quantity":"1"+"0"*40},"out of range"),
+                                ({"quantity":"NaN"},"finite positive"),
+                                ({"available_at":"9999-12-31T23:59:59Z"},"year must be between"),
+                                ({"available_at":"0001-01-01T00:00:00Z"},"year must be between")):
+            with self.subTest(changes=changes),self.assertRaisesRegex(ValidationError,message):
+                self.from_file(spec_with(**changes))
+        self.assertTrue(self.from_file(spec_with(quantity="0.001")).supplies)       # ordinary values still pass
+        self.assertTrue(self.from_file(spec_with(quantity="123456789012345")).supplies)
+
     def test_synthetic_generator_binds_scenario_and_stage_spec(self):
         from tools.generate_v03_stage_demo import make_example
         scenario, request = make_example()

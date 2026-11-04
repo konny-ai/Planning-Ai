@@ -24,6 +24,16 @@ l'eviction non puo' piu' fallire con una chiave gia' rimossa. Non applicati: div
 `setup_sequence_search.py` (819 righe) e l'handler `setup-stages` della CLI (~215 righe): sono
 refactoring ampi senza cambiamento di comportamento.
 
+## Non rilasciato — fuzzing degli ingressi esterni (specifica v0.3, contratto, report replay)
+
+Ogni campo della specifica `staged-plan`, del contratto e del report di `--replay` e' stato sostituito con
+valori ostili (nulli, tipi sbagliati, stringhe enormi, decimali estremi, date limite): 6.000 casi circa.
+Trovati e corretti: una quantita' come `"1e999999999"` e una data come `9999-12-31T23:59:59Z` facevano uscire
+`decimal.Overflow` / `OverflowError` grezzi (ora quantita' limitate a 1e18 e 28 cifre, anni 1970-2200, e la CLI
+tratta gli errori aritmetici come errori puliti); un report `--replay` con `setup_releases` non-dizionario
+dava `AttributeError` e altri tipi sbagliati messaggi come `unhashable type` (ora validazione esplicita). Dopo
+le correzioni: 0 errori non chiari. Test di regressione, verificati per mutazione. Il contratto non aveva problemi.
+
 ## Non rilasciato — quinta passata (CLI parziale e workbook)
 
 `setup-stages --partial --backward --scenario-output` scrive ora il file richiesto anche quando nulla e'
