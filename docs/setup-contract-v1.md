@@ -254,3 +254,12 @@ violazioni dell'audit.
 avanti) ripete la ricerca da piu' partenze deterministiche (ordine per scadenza, per
 stato, N perturbazioni con seme fisso) e tiene la migliore; il report riporta
 `multistart`. Con `--backward`, `--task-modes` o `--partial` l'opzione e' rifiutata.
+
+## Formato del report
+
+Il JSON scritto da `setup-stages -o` ha uno [schema versionato](../contracts/setup-stages-report-v1.schema.json)
+(chiavi obbligatorie `sequence`, `bookings`, `kpis`, `audit_violations`; le altre compaiono solo con l'opzione
+che le produce: `search`, `multistart`, `backward`, `just_in_time_tail`, `task_modes`, `unplanned`, `replay`).
+`kpis` e' `null` quando non e' definito (commesse senza alcuna fase pianificata). Un test applica lo schema ai
+report di tutte le modalita' e verifica che rifiuti report alterati. Il report di `staged-plan` aggiunge
+`mode`, `materials` ed `erp_publishable` ed e' descritto in [anteprima v0.3](v03-staged-file-preview.md).

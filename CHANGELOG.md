@@ -14,6 +14,13 @@ esatta con piano completo su 250 scenari casuali, su 150 scenari a stadi e sui c
 completate e inizi fissi; stesso hash delle prenotazioni sulle misure: 80 fasi 11,4 s -> 8,9 s,
 160 fasi 32,3 s -> 22,6 s. Il resto del tempo e' nel calcolo degli intervalli liberi.
 
+## Non rilasciato — schema del report di `setup-stages`
+
+`contracts/setup-stages-report-v1.schema.json`: il formato del report per le integrazioni. Un
+validatore minimo in sola libreria standard (`tests/schema_check.py`) applica lo schema ai report di
+11 modalita' (base, ricerca, partenze multiple, just-in-time, backward con e senza ricerca, per task,
+parziale, replay) e verifica che rifiuti report alterati.
+
 ## Non rilasciato — partenze multiple anche per il backward, errori piu' chiari
 
 `optimize_backward_sequence_multistart` / `setup-stages --backward --objective ... --restarts N --seed S`:
