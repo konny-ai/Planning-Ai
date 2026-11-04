@@ -1,6 +1,7 @@
 """Versioned strict JSON boundary. Unknown fields and implicit conversions fail."""
 import hashlib
 import json
+import threading
 from dataclasses import fields, is_dataclass
 from datetime import UTC, date, datetime, time
 from planning_factory.domain.models import (
@@ -16,7 +17,23 @@ _OMITTED_DEFAULTS = {'external_end': None, 'preferred_alternative': None, 'max_l
                      'efficiency_bp': 10000}
 
 
+_SCALARS = frozenset((str, int, float, bool, type(None)))
+_DATACLASS_FIELDS: dict = {}   # class -> ((name, omitted default or _KEEP), ...)
+_KEEP = object()
+
+
+def _field_plan(cls):
+    plan = _DATACLASS_FIELDS.get(cls)
+    if plan is None:
+        plan = _DATACLASS_FIELDS[cls] = tuple(
+            (f.name, _OMITTED_DEFAULTS.get(f.name, _KEEP)) for f in fields(cls))
+    return plan
+
+
 def primitive(value):
+    kind = type(value)
+    if kind in _SCALARS:          # exact builtin scalars: the generic path would return them unchanged
+        return value
     if isinstance(value, datetime):
         instant(value, 'datetime')
         return value.astimezone(UTC).isoformat().replace('+00:00', 'Z')
@@ -24,9 +41,13 @@ def primitive(value):
         return value.isoformat()
     if is_dataclass(value):
         # Preserve existing v1 scenario digests and golden fixtures when unused.
-        return {f.name: primitive(getattr(value, f.name)) for f in fields(value)
-                if not (f.name in _OMITTED_DEFAULTS and getattr(value, f.name) == _OMITTED_DEFAULTS[f.name]
-                        and type(getattr(value, f.name)) is type(_OMITTED_DEFAULTS[f.name]))}
+        result = {}
+        for name, omitted in _field_plan(kind):
+            item = getattr(value, name)
+            if omitted is not _KEEP and item == omitted and type(item) is type(omitted):
+                continue
+            result[name] = primitive(item)
+        return result
     if isinstance(value, (tuple, list)):
         return [primitive(x) for x in value]
     if isinstance(value, dict):
@@ -38,8 +59,24 @@ def dumps(value) -> str:
     return json.dumps(primitive(value), ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False) + '\n'
 
 
+_DIGESTS_LOCK = threading.Lock()   # the service plans in threads: guard eviction and insertion
+_DIGESTS: dict = {}   # id(scenario) -> (scenario, digest); the strong reference keeps the id unique
+
+
 def scenario_digest(s: Scenario) -> str:
-    return hashlib.sha256(dumps(s).encode('utf-8')).hexdigest()
+    """SHA-256 of the canonical JSON. Memoized per scenario *object*: scenarios
+    are frozen dataclasses of tuples, so the digest of one object never changes
+    (the planner asks for it several times per plan). The cache is small and
+    holds a strong reference so an id can never be reused by another object."""
+    hit = _DIGESTS.get(id(s))
+    if hit is not None and hit[0] is s:
+        return hit[1]
+    digest = hashlib.sha256(dumps(s).encode('utf-8')).hexdigest()
+    with _DIGESTS_LOCK:
+        while len(_DIGESTS) >= 16:
+            _DIGESTS.pop(next(iter(_DIGESTS)), None)
+        _DIGESTS[id(s)] = (s, digest)
+    return digest
 
 
 def obj(value, cls, required=()):

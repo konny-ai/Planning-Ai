@@ -18,7 +18,7 @@ from planning_factory.domain.production_flow import (
     apply_material_releases,
 )
 from planning_factory.domain.setup_contract import SetupContract
-from planning_factory.domain.validation import ValidationError
+from planning_factory.domain.validation import ValidationError, compile_tasks
 from planning_factory.domain.wip_snapshot import (
     MachineObservation, PausedRunProgress, prepare_paused_wip,
 )
@@ -36,6 +36,10 @@ class MaterialStagedPlan:
     material_scenario: Scenario
     allocation: MaterialAvailability
     staged: StagedSetupResult
+    # Set only for ADR 005 option A: the machine order actually used (it may
+    # come from the sequence search) and the backward result with its gaps.
+    machine_sequence: tuple[str, ...] | None = None
+    backward: object | None = None
 
 
 def plan_materials_and_setup_stages(
@@ -50,6 +54,8 @@ def plan_materials_and_setup_stages(
     external_commitments: tuple[MaterialCommitment, ...] | None = None,
     frozen_bookings: tuple[StageBooking, ...] = (),
     max_alternatives: int = 32,
+    backward: bool = False,
+    sequence_objective: str | None = None,
 ) -> MaterialStagedPlan:
     """Allocate -> audit material -> apply releases -> stage plan -> audit.
 
@@ -87,6 +93,12 @@ def plan_materials_and_setup_stages(
               for task, item, quantity in allocation.shortages),
         ])
     adjusted = apply_material_releases(scenario, allocation)
+    if sequence_objective is not None and not backward:
+        raise ValidationError(['sequence_objective requires backward=True '
+                               '(the forward pipeline takes an explicit sequence)'])
+    if backward:
+        return _plan_backward(scenario, adjusted, allocation, contract, machine_sequence,
+                              frozen_bookings, max_alternatives, sequence_objective)
     staged = schedule_setup_stages(adjusted, contract, machine_sequence,
                                    max_alternatives=max_alternatives,
                                    frozen_bookings=frozen_bookings)
@@ -99,6 +111,41 @@ def plan_materials_and_setup_stages(
             'end-to-end planning audit failed', *plan_errors, *stage_errors
         ])
     return MaterialStagedPlan(scenario, adjusted, allocation, staged)
+
+
+def _plan_backward(source, adjusted, allocation, contract, machine_sequence,
+                   frozen_bookings, max_alternatives, objective) -> MaterialStagedPlan:
+    """ADR 005 option A after the material gates: runs late, setups just before.
+
+    Only ever delays work relative to the material-adjusted scenario, so material
+    availability keeps holding. Frozen stage bookings are never moved: they
+    bound how far their neighbours can be delayed.
+    """
+    from .setup_sequence_search import (
+        backward_setup_before_run, optimize_backward_sequence,
+    )
+    if objective is not None:
+        search = optimize_backward_sequence(
+            adjusted, contract, machine_sequence, objective=objective,
+            max_alternatives=max_alternatives, frozen_bookings=frozen_bookings)
+        result, sequence = search.result, search.sequence
+    else:
+        result = backward_setup_before_run(adjusted, contract, machine_sequence,
+                                           max_alternatives=max_alternatives,
+                                           frozen_bookings=frozen_bookings)
+        sequence = machine_sequence
+    before, _, _ = compile_tasks(adjusted)
+    after, _, _ = compile_tasks(result.scenario)
+    if any(after[tid].release < task.release for tid, task in before.items()):
+        raise ValidationError(['backward planning must never move a release earlier than the material gate'])
+    plan_errors = verify_plan(result.solution.scenario, result.solution.plan)
+    stage_errors = audit_stage_capacity(contract, result.scenario, sequence,
+                                        result.solution.bookings,
+                                        frozen_bookings=frozen_bookings)
+    if plan_errors or stage_errors:
+        raise ValidationError(['end-to-end planning audit failed', *plan_errors, *stage_errors])
+    return MaterialStagedPlan(source, result.scenario, allocation, result.solution,
+                              sequence, result)
 
 
 def plan_residual_wip_materials_and_setup(
@@ -116,6 +163,8 @@ def plan_residual_wip_materials_and_setup(
     external_commitments: tuple[MaterialCommitment, ...] | None = None,
     frozen_bookings: tuple[StageBooking, ...] = (),
     max_alternatives: int = 32,
+    backward: bool = False,
+    sequence_objective: str | None = None,
 ) -> MaterialStagedPlan:
     """Normalize paused WIP, then run the same material and stage audits.
 
@@ -136,6 +185,8 @@ def plan_residual_wip_materials_and_setup(
         external_commitments=external_commitments,
         frozen_bookings=frozen_bookings,
         max_alternatives=max_alternatives,
+        backward=backward,
+        sequence_objective=sequence_objective,
     )
 
 
@@ -152,6 +203,8 @@ def plan_materials_with_active_holds(
     external_commitments: tuple[MaterialCommitment, ...] | None = None,
     frozen_bookings: tuple[StageBooking, ...] = (),
     max_alternatives: int = 32,
+    backward: bool = False,
+    sequence_objective: str | None = None,
 ) -> MaterialStagedPlan:
     """Block currently occupied resources, then allocate and plan normally.
 
@@ -167,4 +220,6 @@ def plan_materials_with_active_holds(
         external_commitments=external_commitments,
         frozen_bookings=frozen_bookings,
         max_alternatives=max_alternatives,
+        backward=backward,
+        sequence_objective=sequence_objective,
     )

@@ -1,4 +1,5 @@
 """Strict domain validation and conversion of operations into atomic booking tasks."""
+import threading
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .models import Alternative, Edge, Scenario, Task
@@ -123,6 +124,8 @@ def validate(s: Scenario) -> None:
                 raise ValidationError([f'{o.id}: empty resource bundle'])
             for d in alternative.demands:
                 whole(d.units, f'{o.id} demand units', 1)
+                if not isinstance(d.resource_id, str):   # a list or dict would fail as 'unhashable'
+                    raise ValidationError([f'{o.id}: resource ID must be text'])
                 if d.resource_id not in resources or d.resource_id in ids:
                     raise ValidationError([f'{o.id}: unknown or duplicate resource {d.resource_id}'])
                 ids.add(d.resource_id)
@@ -171,7 +174,31 @@ def bundle_key(a: Alternative) -> tuple:
     return tuple(sorted(a.demands))
 
 
+_COMPILED_LOCK = threading.Lock()   # the service plans in threads: guard eviction and insertion
+_COMPILED: dict = {}   # id(scenario) -> (scenario, tasks, edges, order); the strong ref keeps the id unique
+
+
 def compile_tasks(s: Scenario) -> tuple[dict[str, Task], tuple[Edge, ...], tuple[str, ...]]:
+    """Validate and collapse a scenario into schedulable tasks.
+
+    Memoized per scenario *object* (scenarios are frozen, so the result of one object never
+    changes; the planner asks for it several times per plan). The cache is small, holds a
+    strong reference so an id is never reused by another object, and every call returns a
+    fresh dict so no caller can alter what is cached (tasks, edges and order are immutable).
+    Validation failures are never cached.
+    """
+    hit = _COMPILED.get(id(s))
+    if hit is not None and hit[0] is s:
+        return dict(hit[1]), hit[2], hit[3]
+    tasks, edges, order = _compile_tasks(s)
+    with _COMPILED_LOCK:
+        while len(_COMPILED) >= 16:
+            _COMPILED.pop(next(iter(_COMPILED)), None)
+        _COMPILED[id(s)] = (s, tasks, edges, order)
+    return dict(tasks), edges, order
+
+
+def _compile_tasks(s: Scenario) -> tuple[dict[str, Task], tuple[Edge, ...], tuple[str, ...]]:
     validate(s)
     ops = {o.id: o for o in s.operations}
     membership = {oid: 'nest:' + n.id for n in s.nestings for oid in n.operation_ids}

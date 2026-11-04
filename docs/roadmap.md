@@ -88,7 +88,9 @@ Il confronto `integrations/factory-export/tools/compare_bench.py` può ora emett
 - [x] Collaudo di pubblicazione sul clone banco A (20/10/2026): run 39440561563, 769 fasi e 721 blocchi; `--verify` senza differenze. Restano da validare le scelte di business del cliente.
 - [ ] Autorizzare nel collaudo (#3) la pubblicazione sul database cliente **solo** dopo accettazione funzionale del nuovo motore e verifica tecnica dei trigger, senza richiedere parita' legacy.
 - [x] Gestione eccezioni e variazioni calendario Factory nel convertitore (PR #38).
-- [ ] Setup dinamici e strategia esplicita per le fasi senza risorse candidate, sulla base delle regole produttive approvate.
+- [x] Strategia esplicita per le fasi senza risorse candidate: opzione B ([ADR 006](decisions/006-fasi-senza-risorse-candidate-proposta.md)), opt-in con `setup-stages --partial`.
+- [x] Stato macchina: dichiarato nel file e valido a inizio orizzonte (confermato, ADR 006); nessun codice nuovo.
+- [x] Preattrezzaggio esterno: escluso, il setup parte solo a macchina libera (confermato, ADR 006); nessun codice nuovo.
 
 ## Ottimizzazione indipendente dal DB Factory (incremento sperimentale)
 
@@ -112,6 +114,11 @@ Il confronto `integrations/factory-export/tools/compare_bench.py` può ora emett
   con turni, nesting indivisibili e anti-doppio conteggio (PR #62).
 - [x] Scheduler opt-in tecnico di due fasi, capacità percentuale finita e
   sequenza macchina fornita, con verifiche indipendenti (PR #63).
+- [x] Sequenza macchina iniziale automatica (EDD con precedenze) e mosse di
+  reinserimento nella ricerca di sequenza, sempre auditate.
+- [x] Fasi già completate come storico nello scheduler a due stadi (stato macchina, precedenze, audit, KPI).
+- [x] Scadenze fornitore (external_end) come vincolo FS sulle fasi successive nello scheduler a due stadi.
+- [x] Inizi fissi (fixed_start) nello scheduler a due stadi, con audit dell'ancoraggio.
 - [ ] Rendere completo lo scheduler setup/run: sequenza macchina ottimizzata,
   congelamenti/consuntivi, tutti i vincoli di dominio e adapter ERP.
   Il piano di stage e' tecnico e non pubblicabile in Factory (#53).

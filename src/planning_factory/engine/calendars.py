@@ -1,4 +1,5 @@
 """Calendar expansion and interval algebra, using UTC elapsed working seconds."""
+from bisect import bisect_right
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 from planning_factory.domain.models import Calendar, Interval
@@ -31,24 +32,52 @@ def intersect(a, b) -> tuple[Interval, ...]:
     return merge(result)
 
 
+def _interval_end(item):
+    return item.end
+
+
+def _subtract_sorted(intervals, cuts) -> tuple[Interval, ...]:
+    """``intervals`` sorted and disjoint, ``cuts`` merged and sorted.
+
+    Walks the cuts, not the intervals: the stretches between two cuts are copied in
+    bulk (bisect + slice), so the cost follows the number of cuts. Same result as a
+    linear sweep over every interval.
+    """
+    n = len(intervals)
+    result = []
+    pos = 0
+    start = None      # start of what is left of intervals[pos] after the cuts seen so far
+    for cut in cuts:
+        j = bisect_right(intervals, cut.start, lo=pos, key=_interval_end)
+        if j > pos:   # intervals[pos:j] end before this cut: untouched (bar a pending remainder)
+            if start is not None:
+                result.append(Interval(start, intervals[pos].end))
+                result.extend(intervals[pos + 1:j])
+            else:
+                result.extend(intervals[pos:j])
+            pos, start = j, None
+        while pos < n and intervals[pos].start < cut.end:
+            item = intervals[pos]
+            begin = item.start if start is None else start
+            if begin < cut.start:
+                result.append(Interval(begin, cut.start))
+            if cut.end < item.end:
+                start = cut.end   # a remainder is left: a later cut may still split it
+                break
+            pos += 1
+            start = None
+    if start is not None:
+        result.append(Interval(start, intervals[pos].end))
+        pos += 1
+    result.extend(intervals[pos:])
+    return tuple(result)
+
+
 def subtract(intervals, closures) -> tuple[Interval, ...]:
     cuts = merge(closures)
     if all(a.end <= b.start for a, b in zip(intervals, intervals[1:])):
-        # Sorted disjoint input (calendars, free time): one linear sweep, same result.
-        result, j = [], 0
-        for item in intervals:
-            start = item.start
-            while j < len(cuts) and cuts[j].end <= start:
-                j += 1
-            k = j
-            while k < len(cuts) and cuts[k].start < item.end:
-                if start < cuts[k].start:
-                    result.append(Interval(start, cuts[k].start))
-                start = max(start, cuts[k].end)
-                k += 1
-            if start < item.end:
-                result.append(Interval(start, item.end) if start != item.start else item)
-        return tuple(result)
+        # Sorted disjoint input (calendars, free time).
+        return _subtract_sorted(intervals, cuts)
     result = list(intervals)
     for cut in cuts:
         next_result = []

@@ -1,5 +1,397 @@
 # Changelog
 
+## Non rilasciato — ripianificazione incrementale esatta
+
+`plan(..., trace=, resume=)`: se uno scenario differisce dal precedente solo per il `release`
+di alcune attivita', quelle schedulate **prima** della prima modificata nello stesso ordine di
+dispatch sono identiche (con la politica `priority` l'ordine dipende solo da chiavi statiche,
+non dal rilascio) e si riusano invece di ricercarle di nuovo. Ogni precondizione e' ricontrollata
+(`_reusable`: stesse risorse, calendari, impostazioni, orizzonte, archi e attivita' tranne il solo
+rilascio dichiarato; solo attivita' in avanti; piano precedente senza lavoro non collocato); se una
+fallisce si ripianifica per intero, quindi il risultato non dipende mai da `resume`. Lo scheduler a
+stadi la usa nei cicli del backward (`resume_from`, `changed_stage_tasks`). Provata l'equivalenza
+esatta con piano completo su 250 scenari casuali, su 150 scenari a stadi e sui casi con nesting,
+completate e inizi fissi; stesso hash delle prenotazioni sulle misure: 80 fasi 11,4 s -> 8,9 s,
+160 fasi 32,3 s -> 22,6 s. Il resto del tempo e' nel calcolo degli intervalli liberi.
+
+## Non rilasciato — correzioni dalla revisione del codice
+
+(1) Finestra di ricerca: con piu' alternative poteva scegliere una macchina diversa dalla ricerca
+completa (vedi sopra). (2) `plan(trace=)` scrive la traccia dopo il ciclo di riparazione, quindi
+descrive sempre il piano restituito quando c'e' una traccia. (3) Le cache per oggetto di
+`compile_tasks` e `scenario_digest` sono protette da un lock (il servizio pianifica in thread) e
+l'eviction non puo' piu' fallire con una chiave gia' rimossa. Non applicati: dividere
+`setup_sequence_search.py` (819 righe) e l'handler `setup-stages` della CLI (~215 righe): sono
+refactoring ampi senza cambiamento di comportamento.
+
+## Non rilasciato — test di mutazione del codice più delicato
+
+Modificando una condizione per volta (confronti, `and`/`or`, `min`/`max`, segni, `True`/`False`) nei moduli di
+riuso incrementale, tempi liberi, sottrazione degli intervalli, vincoli minimi di avvio, piano parziale e
+ricerca di sequenza, ho cercato le modifiche che nessun test rilevava. Trovate e coperte: il riuso va rifiutato
+con attivita' backward in entrambi gli scenari e con lavoro non collocato; un arco tra due traguardi fornitore
+con precedenza inizio->inizio va ignorato; la chiusura del piano parziale si propaga per piu' livelli e
+attraverso un nesting; sequenza o contratto incompleti vanno rifiutati; a parita' di punteggio `best` conserva
+l'ordine per scadenza; il ritardo delle lavorazioni non va in crash con un successore fornitore, misura le
+precedenze inizio->inizio dall'inizio, non riporta spostamenti di 0 secondi e non tenta le lavorazioni
+congelate. I mutanti rimasti sono testo di docstring, equivalenti (`<` -> `<=` che assegna lo stesso valore) o
+pura ottimizzazione (i limiti che non cambiano il risultato). Il codice del repo non e' cambiato. La finestra di
+ricerca ha ora tre guardie: che venga davvero usata (una spia su `bundle_free` ne misura la portata, cosi' un
+guasto silenzioso che la renderebbe inutile e il piano solo piu' lento non passa), che decida l'orizzonte intero
+quando un'alternativa non ci sta, e che non superi mai il limite superiore della ricerca (un successore con inizio
+fisso).
+
+## Non rilasciato — proprietà indipendenti sui piani a stadi
+
+`tests/test_staged_precedence_property.py`: due verifiche scritte da zero, che non usano gli archi di `compile_tasks`
+ne' l'audit, sui piani di quattro percorsi (in avanti, backward, parziale, per modalita' di task) su centinaia di
+scenari casuali con completate, fornitori, inizi fissi e lag. (1) Ogni precedenza dichiarata sulle operazioni originali
+(FS e SS, con lag, anche da predecessori completati o fornitori) e' rispettata; sarebbe bastata a trovare il difetto
+del lag da predecessore completato. (2) Nessuna risorsa e' mai prenotata oltre la sua capacita' in nessun istante.
+Entrambe passano senza violazioni, e un controllo negativo per ciascuna dimostra che il verificatore le rileva
+davvero. Nessun difetto trovato. Solo test.
+
+## Non rilasciato — test di mutazione delle ricerche di sequenza
+
+Le ricerche (in avanti, backward, partenze multiple) e la generazione delle partenze: da 20 a 31 mutanti su 41
+individuati (restano due equivalenti, perche' il controllo interno limita comunque le valutazioni, e righe di
+docstring). Coperto: sequenza iniziale non valida rifiutata col messaggio giusto (duplicati a parita' di lunghezza, piu'
+lunga, piu' corta); budget di valutazioni usato esattamente e mai superato; la ricerca prosegue su piu' passaggi
+(da 9.000 s di attrezzaggio ben sotto, un ottimo locale dichiarato); `--restarts 0` valido con le due partenze
+nominate; vince la partenza col punteggio migliore (in avanti e backward, con budget 1 che non puo' riparare); le
+partenze perturbate scambiano solo fasi della stessa macchina (provato con tre macchine, con due l'inversione non si
+distingue). Lo strumento di misura rifiuta ora di partire se i test falliscono gia' sul codice originale: un primo
+"41/41" era un falso positivo di questo tipo. Solo test.
+
+## Non rilasciato — test di mutazione dei comandi CLI `setup-stages` e `staged-plan`
+
+I due blocchi della CLI (circa 270 righe) avevano 24/35 e 6/9 mutanti individuati; ora 31/35 e 9/9. Coperte le
+lacune vere: le chiavi dei report JSON e dei riepiloghi stampati sono ordinate in ogni modalita' (cosi' si possono
+confrontare riga per riga e riprodurre); `--objective` senza `--restarts` e' una ricerca a partenza singola (con
+`--restarts` si prova anche l'ordine per stato); nella modalita' normale `staged-plan` rifa il proprio audit e,
+se segnala una violazione, esce con 2 e la riporta. I quattro mutanti rimasti in `setup-stages` sono testi di
+messaggi o un controllo ridondante con altri che rifiutano prima. Solo test.
+
+## Non rilasciato — test di mutazione del parser della specifica v0.3 e della politica del workbook
+
+Il parser della specifica (un file esterno) aveva 14 mutanti su 28 individuati: ora 26 (restano due equivalenti, un
+percorso inesistente che fallisce comunque e un `NaN` impossibile dopo il parsing). Un test a tabella controlla, con il
+messaggio esatto di ciascuna, estensione e dimensione del file, versione dello schema (anche testo e booleano), formato
+del digest, le combinazioni di modalita' non ammesse (normale con WIP o blocchi, in pausa con blocchi, blocchi con
+osservazioni o avanzamenti, in pausa senza avanzamenti, blocchi senza blocchi), la conferma dei residui fuori dalla
+modalita' in pausa, l'intervallo di `max_alternatives` (1 e 64 validi), durate originale/lavorata/residua pari a zero e
+timestamp nulli o con frazioni. Politica `objective` del workbook: ora anche le righe con codice giusto ma tipo
+sbagliato e viceversa. Solo test.
+
+## Non rilasciato — test di mutazione della pipeline materiali e del report HTML
+
+Pipeline materiali: l'audit finale della pipeline (`piano` + `capacita'`) era provato solo quando falliscono
+entrambi o nessuno; ora un test fa fallire una sola delle due verifiche, in avanti e in backward, e controlla
+che il piano venga fermato con il loro messaggio. Report HTML: nessun test verificava dove sono disegnate le barre.
+Ora la posizione e la larghezza sono controllate in proporzione al tempo (barra da un secondo con larghezza
+minima visibile, prenotazione di durata zero senza divisione per zero, prenotazione singola a tutta larghezza).
+Tutti i mutanti sul codice delle due parti sono ora individuati (11/11 il report, 8/10 la pipeline con i due
+restanti in docstring). Solo test.
+
+## Non rilasciato — test di mutazione dell'audit indipendente
+
+L'audit (`audit_stage_capacity`) e' la rete di sicurezza di ogni piano a stadi: con i test indiretti di prima solo
+42 mutanti su 59 del suo codice venivano individuati. Il nuovo `tests/test_audit_stage_capacity_guards.py` altera un
+piano valido in modi precisi e controlla l'errore esatto: durata totale sbagliata o segmenti assenti, segmenti fuori
+orizzonte o di durata zero, segmenti sovrapposti (adiacenti validi), allocazioni duplicate/sconosciute/a 0%/oltre il
+100%/non intere (1 e 10.000 punti base validi), lavorazione senza la sua macchina, fase o stadio sconosciuti nelle
+prenotazioni e nei record congelati, sequenza non coerente, attrezzaggio sovrapposto alla lavorazione precedente
+(back to back valido), predecessore senza segmenti (errore, mai un'eccezione). Ora 57 su 59, i due rimasti sono
+docstring. Solo test.
+
+## Non rilasciato — test di mutazione dello scheduler a stadi
+
+Stessa misura su `schedule_setup_stages`: da 17 a 32 mutanti su 44 individuati. Coperte le lacune mie (il default
+verifica davvero piano e audit mentre `audit=False` li salta e `verify_staged` li esegue dopo; `setup_releases`
+ritarda davvero l'attrezzaggio e non lo anticipa mai; una lavorazione non interrompibile resta in un solo
+segmento; il lavoro non collocabile fallisce in modo esplicito; le attivita' backward sono rifiutate dallo
+scheduler solo in avanti; lavorazione congelata e inizio fisso si escludono; il token di ripresa viene registrato) e
+le guardie preesistenti (intervallo di `max_alternatives`, doppio conteggio dell'attrezzaggio, coerenza di
+sequenza e contratto, risorse non valide, prenotazioni congelate non valide, attrezzaggio di durata zero). Restano
+codice morto, guardie gia' duplicate dall'audit e confronti di confine equivalenti. Solo test.
+
+## Non rilasciato — fuzzing dello scenario JSON
+
+Stesso metodo sullo scenario passato a `setup-stages` (2.055 mutazioni di campo): nessuna eccezione
+grezza; un solo messaggio poco chiaro, `unhashable type: 'list'` quando `resource_id` di una richiesta di
+risorsa era una lista o un dizionario. Ora la validazione dice `resource ID must be text` indicando
+l'operazione. Test per mutazione (5 casi falliscono senza la correzione). Dopo la correzione 0 casi non
+chiari sui tre ingressi esterni (specifica v0.3, contratto/report replay, scenario).
+
+## Non rilasciato — fuzzing degli ingressi esterni (specifica v0.3, contratto, report replay)
+
+Ogni campo della specifica `staged-plan`, del contratto e del report di `--replay` e' stato sostituito con
+valori ostili (nulli, tipi sbagliati, stringhe enormi, decimali estremi, date limite): 6.000 casi circa.
+Trovati e corretti: una quantita' come `"1e999999999"` e una data come `9999-12-31T23:59:59Z` facevano uscire
+`decimal.Overflow` / `OverflowError` grezzi (ora quantita' limitate a 1e18 e 28 cifre, anni 1970-2200, e la CLI
+tratta gli errori aritmetici come errori puliti); un report `--replay` con `setup_releases` non-dizionario
+dava `AttributeError` e altri tipi sbagliati messaggi come `unhashable type` (ora validazione esplicita). Dopo
+le correzioni: 0 errori non chiari. Test di regressione, verificati per mutazione. Il contratto non aveva problemi.
+
+## Non rilasciato — quinta passata (CLI parziale e workbook)
+
+`setup-stages --partial --backward --scenario-output` scrive ora il file richiesto anche quando nulla e'
+pianificabile (prima lo pretendeva senza crearlo); il report con nessuna fase pianificata resta valido
+rispetto allo schema (`kpis` nullo). La politica `objective` del workbook e' provata su un vero file `.xlsx`
+scritto e riletto (prima solo da tabelle in memoria): backward piu' tardi, attrezzaggio non anticipato,
+sequenza nell'evidenza. Test per entrambi.
+
+## Non rilasciato — correzione dalla quarta revisione (piano parziale)
+
+`--no-candidate` / `extra_without_candidates` rifiutano ora le operazioni gia' completate e i
+traguardi fornitore (non servono risorse): prima venivano rimosse in silenzio dal piano e
+trascinavano via i successori pianificabili (`PREDECESSOR_UNPLANNED`). Provata anche la modalita'
+`holds` di `staged-plan` (normale, backward, con ricerca): audit pulito. Test di regressione.
+
+## Non rilasciato — correzioni dalla terza revisione (ricerca di sequenza)
+
+(1) `default_machine_sequence` andava in `KeyError` con due traguardi fornitore concatenati elencati
+dal successore: il grafo e' ora costruito solo sulle attivita' pianificate. (2) `sequence_metrics`
+dava un makespan negativo se tutto era completato prima dell'inizio dell'orizzonte (e il report
+violava il proprio schema): ora e' almeno 0. (3) Il ritardo delle lavorazioni non tenta piu' di
+spostare quelle con inizio fisso, che comparivano tra le "rifiutate". Ognuna con un test.
+
+## Non rilasciato — lag da predecessori completati (correzione)
+
+Nel piano a stadi l'arco da un predecessore gia' completato veniva scartato **insieme al suo lag**: il
+successore partiva troppo presto (con lag di 20 ore, il 19 ottobre invece del 20, come invece fa il
+pianificatore standard) e l'audit indipendente non lo vedeva. Ora il vincolo minimo di avvio
+(`external_release_floors`) comprende `completed_at + lag` per FS e SS, ed e' verificato anche
+dall'audit. Test di regressione che fallisce senza la correzione (3 errori).
+
+## Non rilasciato — schema del report di `setup-stages`
+
+`contracts/setup-stages-report-v1.schema.json`: il formato del report per le integrazioni. Un
+validatore minimo in sola libreria standard (`tests/schema_check.py`) applica lo schema ai report di
+11 modalita' (base, ricerca, partenze multiple, just-in-time, backward con e senza ricerca, per task,
+parziale, replay) e verifica che rifiuti report alterati.
+
+## Non rilasciato — partenze multiple anche per il backward, errori piu' chiari
+
+`optimize_backward_sequence_multistart` / `setup-stages --backward --objective ... --restarts N --seed S`:
+stesse partenze deterministiche della ricerca in avanti (ordine per scadenza, per stato, N
+perturbazioni), ma ogni candidato e' valutato sul proprio piano backward; mai peggiore della
+partenza singola. `--restarts` resta rifiutato con `--task-modes` e `--partial`. Il codice di
+generazione delle partenze e' condiviso (comportamento in avanti invariato). Un report `--replay`
+malformato ora da' un errore esplicito invece di una chiave mancante. Controllati 25 ingressi malformati
+(JSON rotto, file vuoti o mancanti, contratti non validi, opzioni fuori intervallo): sempre errore JSON e
+codice 1, mai un traceback.
+
+## Non rilasciato — serializzazione piu' veloce (digest identici)
+
+`primitive()` (usata da `dumps` e da `scenario_digest`) ha un percorso rapido per i tipi base esatti e
+calcola una volta per classe i nomi dei campi; tutto il resto passa dal percorso di prima. L'output e'
+identico byte per byte (test contro l'implementazione originale congelata in
+`tests/reference_json_io.py`, su 340 oggetti tra scenari, piani e valori limite), quindi i digest gia'
+registrati restano validi. Backward: 80 fasi 5,7 s -> 4,8 s, 160 fasi 13,6 s -> 12,7 s.
+
+## Non rilasciato — tempi liberi aggiornati in modo incrementale
+
+`bundle_free` con cache non ricalcola piu' da zero i tempi liberi di una risorsa a ogni nuova
+prenotazione: tiene il profilo di carico (aggiornato per prenotazione) e sottrae dai tempi liberi
+memorizzati solo le zone che le nuove prenotazioni saturano (`free_intervals` resta la definizione
+di riferimento). Provata l'uguaglianza esatta passo per passo su 400 sequenze casuali di
+prenotazioni (capacita' 1, 2, 3, 10.000, risorse a capacita' infinita; oltre 20.000 confronti con il
+calcolo da zero). Stesso hash delle prenotazioni su tutte le misure; backward: 80 fasi 6,8 s -> 5,7 s,
+160 fasi 18,6 s -> 13,6 s, 320 fasi 97 s -> 50 s.
+
+## Non rilasciato — fuzz esteso del percorso a stadi
+
+`tests/test_setup_stage_fuzz_extended.py`: scenari casuali a seme fisso su prenotazioni congelate
+(restano identiche o il calcolo fallisce in modo esplicito), fasi non pianificabili (chiusura sui
+successori, nessuna prenotazione per le non pianificate, audit pulito) e modalita' per task
+(piani sempre auditati). Nessun difetto trovato; nessuna modifica di comportamento.
+
+## Non rilasciato — comando `staged-plan` (materiali + stadi da riga di comando)
+
+`planning-factory staged-plan scenario.json spec.json -o piano.json [--html] [--scenario-output]`
+esegue la pipeline materiali + setup/run (+ backward e ricerca di sequenza se la specifica v0.3
+li chiede) da file, con report JSON (materiali, sequenza, prenotazioni, KPI, gap, audit) e
+HTML offline. Fail-closed: carenza di materiale, digest non coerente, audit o sovrascrittura
+degli ingressi fermano il calcolo senza scrivere il report; mai pubblicabile su ERP.
+
+## Non rilasciato — ottimizzazioni esatte del motore
+
+(1) `subtract` degli intervalli lavora sui tagli invece che su ogni intervallo (provato uguale alla
+definizione su 3.000 casi casuali); (2) la ricerca in avanti guarda prima in una finestra di 14
+giorni (`scheduler.SEARCH_WINDOW`) e poi sull'orizzonte intero; la finestra decide solo se **ogni**
+alternativa del task vi trova posto (una che entra solo dopo potrebbe comunque vincere sull'orizzonte
+intero, partendo prima: difetto trovato dalla revisione del codice e corretto, con test che fallisce
+senza la correzione), quindi il piano non cambia (provato su 200 scenari con
+attivita' lunghe, anche oltre la finestra; escluse ricerche all'indietro, a inizio esatto e con
+alternativa preferita); (3) `compile_tasks` e' memorizzato per oggetto scenario, restituendo
+sempre un dizionario nuovo. Stesso hash delle prenotazioni su tutte le misure; backward: 80 fasi
+8,9 s -> 6,8 s, 160 fasi 22,6 s -> 18,6 s, 320 fasi 141 s -> 97 s.
+
+## Non rilasciato — guida e esempio per la pianificazione a stadi
+
+`docs/guida-pianificazione-a-stadi.md` raccoglie in un solo posto ingressi, sequenza,
+ricerca, backward, replay e fasi senza candidate, con `examples/setup-stages/` (dati
+sintetici). Un test esegue gli stessi comandi e controlla i numeri citati (attrezzaggio
+5.400 s -> 1.800 s). Corretti i testi di aiuto della CLI per `--just-in-time-tail` e
+`--scenario-output`, che dicevano ancora "non approvato".
+
+## Non rilasciato — ricerca di sequenza con partenze multiple
+
+`optimize_setup_sequence_multistart` / `setup-stages --objective ... --restarts N --seed S`:
+la ricerca locale parte dall'ordine per scadenza, da quello per stato e da N perturbazioni
+deterministiche (seme fisso) e tiene la migliore; le partenze infattibili sono saltate, ogni
+candidato e' ripianificato e auditato, a parita' vince la prima partenza. Costo al massimo
+(2 + N) ricerche da `--budget` valutazioni. Mai peggiore della ricerca da una sola partenza;
+nessuna garanzia di ottimalita'. Solo per la ricerca in avanti: con `--backward`,
+`--task-modes` o `--partial` l'opzione e' rifiutata (non ignorata). Il report ha `multistart`.
+
+## Non rilasciato — report HTML del piano a stadi
+
+`setup-stages --html report.html` (anche con `--partial`, `--backward`, `--replay`) scrive
+un report offline senza script: barre di attrezzaggio e lavorazione distinte per risorsa,
+prenotazioni, KPI, distanza attrezzaggio→lavorazione del backward, fasi non pianificate
+con codice e violazioni dell'audit. Ogni valore e' escapato (anche gli attributi dei
+suggerimenti) e il file non puo' sovrascrivere ingressi o altre uscite.
+
+## Non rilasciato — prestazioni del backward
+
+Il backward richiedeva una ripianificazione per ogni tentativo: ora (1) il rilascio piu'
+tardo di un setup e il ritardo di una lavorazione sono limitati dai calendari delle loro
+risorse (un limite superiore sicuro: la contesa puo' solo anticiparlo), (2) se gia' uno
+spostamento minimo (1 s per il setup, 1 minuto per la lavorazione) disturba le altre
+prenotazioni non si esplorano gli spostamenti intermedi (euristica prudente: al piu' si
+perde uno stringimento, mai la validita'), (3) `scenario_digest` e' memorizzato per
+oggetto (scenario immutabile), (4) verificatore e audit completo girano solo sui candidati che
+stanno per essere accettati (`schedule_setup_stages(audit=False)` + `verify_staged`); il default
+verifica sempre e i risultati sono identici (stesso hash delle prenotazioni). Misure: 80 fasi 26 s -> 11,7 s, 160 fasi 123 s -> 33 s,
+320 fasi oltre 400 s -> 141 s. Il piano singolo resta sotto 0,35 s a 320 fasi. I risultati
+possono differire leggermente dalla versione precedente (mai peggiori sui KPI, gap
+totale uguale o minore sulle prove). Benchmark riproducibile: `tools/stage_bench.py`.
+
+## Non rilasciato — fasi senza risorse candidate (ADR 006, opzione B)
+
+`plan_setup_stages_partial` / `setup-stages --partial [--no-candidate ...]`: si pianifica
+cio' che ha candidate e si riporta il resto come non pianificato con codice
+(`NO_CANDIDATE`, `PREDECESSOR_UNPLANNED`, `NEST_MEMBER_UNPLANNED`). Compatibile con
+`--backward`. Il comportamento di default resta bloccante; nessuna risorsa, durata o
+data inventata; piano restante auditato. I setup dinamici restano aperti.
+
+## Non rilasciato — backward nel workbook Excel
+
+Il foglio `objective` (prima sempre rifiutato) accetta righe `kind = politica` con
+`planning_direction` (`forward`/`backward`) e `sequence_objective`
+(`delivery`/`setup`/`gap`, richiede backward) per il percorso setup/run; ogni altra
+riga resta rifiutata con errore. L'evidenza riporta `planning_direction` e
+`machine_sequence`. Documentato in `docs/planning-workbook.md`.
+
+## Non rilasciato — backward nel file staged v0.3
+
+Il file JSON dell'anteprima v0.3 accetta `backward` (booleano esplicito) e
+`sequence_objective` (`delivery`/`setup`/`gap`, richiede `backward`), che attivano
+l'opzione A dopo i gate dei materiali. Nessun cambiamento senza i campi. 
+
+## Non rilasciato — riproducibilità: `setup-stages --replay`
+
+I rilasci derivati dei setup non possono stare nello scenario esportato (i setup
+esistono solo come stadi). `--replay REPORT` li ricarica dal report precedente
+insieme alla sequenza, ripianifica sullo scenario esportato, confronta **esattamente**
+le prenotazioni (`replay_matches`) e rilancia l'audit (codice 2 se differiscono o
+se l'audit segnala violazioni). Non si combina con altre opzioni di pianificazione.
+
+## Non rilasciato — modalità per task nello scheduler a due stadi
+
+`plan_setup_stages_by_mode` / `setup-stages --task-modes --scenario-output ...`
+rispettano `mode` per task: `forward` resta il piu' presto possibile,
+`backward` riceve l'opzione A (lavorazione al piu' tardi, setup subito prima),
+`auto` diventa backward se la scadenza e' ad almeno `auto_backward_days` dall'inizio
+(regola `due_distance` del motore standard; la regola `slack` e' rifiutata). Un task
+backward senza scadenza fallisce in modo esplicito. Lo scheduler resta forward-only
+e lo scenario di ingresso non viene modificato. Non si combina con
+`--backward`, `--just-in-time-tail` o `--objective`.
+
+## Non rilasciato — backward nella pipeline materiali
+
+`plan_materials_and_setup_stages` (e le varianti WIP residuo e blocchi attivi)
+accettano `backward=True` e `sequence_objective='delivery'|'setup'|'gap'`: dopo
+allocazione e audit dei materiali applicano l'opzione A (lavorazioni al più
+tardi, setup subito prima), con ricerca di sequenza opzionale sul piano
+backward. Si ritarda soltanto, quindi la disponibilita' dei materiali resta
+garantita (verificato esplicitamente); le prenotazioni congelate sono supportate:
+restano identiche (setup e lavorazione), non vengono mai ritardate e limitano lo
+spazio di ritardo dei vicini (successori, lavoro seguente sulla macchina). `MaterialStagedPlan` espone la
+sequenza usata (`machine_sequence`) e il risultato backward con i gap.
+
+## Non rilasciato — ricerca di sequenza sul piano backward
+
+`optimize_backward_sequence` e `setup-stages --backward --objective delivery|setup|gap`
+cercano la sequenza macchina valutando ogni candidato direttamente sul proprio
+piano backward (ADR 005, opzione A): lavorazioni al più tardi e attrezzaggi
+subito prima. Obiettivi `delivery`, `setup` e `gap` (somma dei gap
+setup→lavorazione); `flow` non è ammesso perché il makespan non è significativo
+per piani just-in-time. Ogni candidato è ripianificato e auditato, con budget
+rigido (1..64) e nessuna garanzia di ottimalità globale.
+
+## Non rilasciato — modalità backward (ADR 005, opzione A, scelta dal committente)
+
+`backward_setup_before_run` / `setup-stages --backward --scenario-output ...`:
+lavorazioni al più tardi possibile e attrezzaggio subito prima di esse, con
+sequenza macchina fissata prima. Ogni passo è ripianificato e auditato; il report
+dà il gap residuo setup→lavorazione per fase. `schedule_setup_stages` accetta
+`setup_releases` (solo ritardi di setup). Non cambia durate/numero di
+attrezzaggi e non sposta nulla prima del piano in avanti.
+
+## Non rilasciato — SPERIMENTALE: lavorazioni just-in-time
+
+`just_in_time_tail` / `setup-stages --just-in-time-tail --scenario-output ...`
+ritarda la lavorazione di ciascun task fino allo spazio che ha prima che
+qualcos'altro debba spostarsi (slack di consegna, distanza dai successori FS/SS
+con lag, distanza dal lavoro successivo sulla macchina; dalle ultime alle prime
+fasi), lasciando l'attrezzaggio anticipato (simile all'opzione B di [ADR 005](docs/decisions/005-backward-setup-proposta.md),
+che resta **una proposta non approvata**). Il ritardo diventa un rilascio
+derivato nello scenario esportato; il piano e' ripianificato e auditato e un
+candidato e' tenuto solo se nessun'altra fase cambia e i KPI non peggiorano
+(altrimenti e' riportato come rifiutato). Non e' la modalita' backward
+completa, che resta rifiutata.
+
+## Non rilasciato — comando `setup-stages`
+
+`planning-factory setup-stages scenario.json contratto.json -o stadi.json`
+pianifica attrezzaggio e lavorazione come stadi separati (ADR 003), con
+sequenza di default per scadenza o `--sequence`, ricerca opzionale
+`--objective delivery|setup|flow` (`--neighbourhood`, `--budget`) e report con
+prenotazioni, KPI e violazioni dell'audit indipendente (codice 2 se presenti).
+Non scrive mai sugli ingressi e non tocca Factory. `--start state-grouped`
+(opzionale, default `edd`) parte da un ordine che raggruppa per macchina le
+fasi con lo stesso stato obiettivo, partendo dallo stato attuale della
+macchina (`state_grouped_sequence`); se viola le precedenze si ricade sull'ordine
+per scadenza. `--start best` (richiede `--objective`) confronta i due ordini
+(`best_start_sequence`) e parte dal migliore sull'obiettivo scelto; a parità
+resta l'ordine per scadenza.
+
+## Non rilasciato — sequenza macchina automatica per lo scheduler setup/run
+
+`optimize_setup_sequence` accetta ora `initial_sequence=None`: la sequenza di
+partenza è `default_machine_sequence`, un ordine deterministico per scadenza
+(EDD) che rispetta le precedenze, senza pesi di business inventati. Nuovo
+parametro `neighbourhood='insertion'` (default `'swap'`, invariato) che aggiunge
+il reinserimento di una fase in posizioni non adiacenti della stessa macchina.
+Ogni candidato resta verificato dallo scheduler a due stadi e dall'audit
+indipendente; nessuna garanzia di ottimalità globale. Test in
+`tests/test_setup_sequence_search.py`.
+
+Lo scheduler a due stadi accetta ora le **fasi già completate** come storico:
+nessuna prenotazione, precedenze dei successori soddisfatte, stato macchina
+osservato aggiornato (devono precedere le fasi attive sulla stessa macchina),
+audit che rifiuta nuove prenotazioni per esse e KPI che ne usano il
+completamento. Le **scadenze promesse dai fornitori** (`external_end`) non hanno fase né
+prenotazione: un successore FS non può avviare la lavorazione prima della fine
+dichiarata più il lag (l'attrezzaggio può anticiparla); l'audit verifica lo
+stesso vincolo e SS da un fornitore è rifiutato. Gli **inizi fissi** (`fixed_start`) ancorano la lavorazione a
+quell'istante (l'attrezzaggio deve concludersi prima, altrimenti il piano
+fallisce in modo esplicito) e l'audit verifica l'ancoraggio; `fixed_alternative`
+restringe le macchine ammesse. Resta rifiutata la modalità backward.
+
 ## Non rilasciato — assistente conversazionale (ramo feat/cliente-assistente-chat-v2)
 
 Pannello **Assistente** in ogni vista della Control Room, con conversazione,

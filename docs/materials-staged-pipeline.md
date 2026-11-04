@@ -78,3 +78,18 @@ motore non dichiara approvato alcun mapping ERP autonomamente.
   pubblicabile direttamente sulle tabelle Factory.
 - Test sintetici aggiunti ma **non eseguiti** su richiesta del committente;
   ogni PR rimane bozza senza merge fino alle verifiche necessarie.
+
+
+## Backward (ADR 005, opzione A)
+
+Con `backward=True` la pipeline, dopo aver allocato e auditato i materiali,
+porta le lavorazioni al piu' tardi e gli attrezzaggi subito prima di esse
+(`backward_setup_before_run`). Si ritarda soltanto: nessun rilascio scende
+sotto quello imposto dai materiali (controllo esplicito, altrimenti errore).
+`sequence_objective` (`delivery`, `setup`, `gap`, richiede `backward=True`)
+cerca la sequenza valutando ogni candidato sul proprio piano backward; la
+sequenza usata e il risultato con i gap sono in `MaterialStagedPlan`.
+Le prenotazioni congelate (`frozen_bookings`) sono supportate: restano
+identiche, non vengono mai ritardate e limitano lo spazio dei vicini; l'audit le
+ricontrolla esattamente. `just_in_time_tail`, `backward_setup_before_run` e
+`optimize_backward_sequence` accettano lo stesso parametro.

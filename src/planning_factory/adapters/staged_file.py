@@ -26,6 +26,9 @@ from planning_factory.engine.material_stage_pipeline import (
 )
 
 MAX_SPEC_BYTES = 1024 * 1024
+MAX_QUANTITY_EXPONENT = 18
+MAX_QUANTITY_DIGITS = 28
+MIN_YEAR, MAX_YEAR = 1970, 2200
 
 
 @dataclass(frozen=True)
@@ -44,6 +47,8 @@ class StagedFileRequest:
     residual_material_requirements_confirmed: bool
     max_alternatives: int
     mode: str
+    backward: bool = False
+    sequence_objective: str | None = None
 
 
 def _keys(value, required, optional=(), label="object"):
@@ -79,6 +84,11 @@ def _qty(value, label):
         raise ValidationError([f"{label}: invalid decimal"]) from None
     if not number.is_finite() or number<=0:
         raise ValidationError([f"{label}: finite positive quantity required"])
+    # Bounded magnitude and precision: absurd exponents ("1e999999999") would overflow the decimal
+    # context later, in the middle of planning, instead of being rejected here.
+    if abs(number.adjusted())>MAX_QUANTITY_EXPONENT or len(number.as_tuple().digits)>MAX_QUANTITY_DIGITS:
+        raise ValidationError([f"{label}: quantity out of range (at most 1e{MAX_QUANTITY_EXPONENT} "
+                               f"and {MAX_QUANTITY_DIGITS} significant digits)"])
     return number
 
 
@@ -89,6 +99,8 @@ def _instant(value, label):
         raise ValidationError([f"{label}: ISO8601 timestamp with UTC offset required"]) from None
     if instant is None or instant.microsecond:
         raise ValidationError([f"{label}: non-null timestamp at second precision required"])
+    if not MIN_YEAR<=instant.year<=MAX_YEAR:   # arithmetic on dates near year 1 or 9999 overflows
+        raise ValidationError([f"{label}: year must be between {MIN_YEAR} and {MAX_YEAR}"])
     return instant
 
 
@@ -135,7 +147,8 @@ def load_staged_file(path: Path, scenario: Scenario) -> StagedFileRequest:
     required=("schema_version","source_scenario_digest","mode","setup_contract",
               "machine_sequence","task_priority","stock","needs")
     optional=("frozen_bookings","max_alternatives","observations",
-              "paused_progresses","active_holds","residual_material_requirements_confirmed")
+              "paused_progresses","active_holds","residual_material_requirements_confirmed",
+              "backward","sequence_objective")
     r=_keys(raw,required,optional,"v0.3 specification")
     if type(r["schema_version"]) is not int or r["schema_version"]!=1:
         raise ValidationError(["v0.3 specification schema_version must be 1"])
@@ -227,17 +240,27 @@ def load_staged_file(path: Path, scenario: Scenario) -> StagedFileRequest:
     alternatives=r.get("max_alternatives",32)
     if type(alternatives) is not int or not 1<=alternatives<=64:
         raise ValidationError(["max_alternatives must be 1..64"])
+    backward=r.get("backward",False)
+    objective=r.get("sequence_objective")
+    if type(backward) is not bool:
+        raise ValidationError(["backward must be an explicit boolean"])
+    if objective is not None and objective not in ("delivery","setup","gap"):
+        raise ValidationError(["sequence_objective must be delivery, setup or gap"])
+    if objective is not None and not backward:
+        raise ValidationError(["sequence_objective requires backward=true"])
     return StagedFileRequest(contract,sequence,tuple(supplies),tuple(needs),
                              priority,accounting=="net",commitments,frozen,
                              tuple(observations),tuple(progresses),tuple(holds),
-                             confirmed,alternatives,mode)
+                             confirmed,alternatives,mode,backward,objective)
 
 
 def calculate_staged_preview(scenario: Scenario, spec: StagedFileRequest):
     opts={"supply_quantities_net_of_external_commitments":spec.inventory_net,
           "external_commitments":spec.external_commitments,
           "frozen_bookings":spec.frozen_bookings,
-          "max_alternatives":spec.max_alternatives}
+          "max_alternatives":spec.max_alternatives,
+          "backward":spec.backward,
+          "sequence_objective":spec.sequence_objective}
     if spec.mode=="paused":
         return plan_residual_wip_materials_and_setup(
             scenario,spec.setup_contract,spec.machine_sequence,

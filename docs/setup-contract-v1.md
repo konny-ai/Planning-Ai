@@ -215,3 +215,51 @@ non esegue attrezzaggio esterno mentre la macchina e' occupata e non
 scrive sul gestionale. La ricerca puo' arrestarsi in un minimo locale:
 per scenari industriali grandi occorrono ulteriori mosse/euristiche
 e benchmark misurati.
+
+
+## Comando `setup-stages`
+
+```sh
+planning-factory setup-stages scenario.json contratto.json -o stadi.json
+planning-factory setup-stages scenario.json contratto.json -o stadi.json \
+  --sequence fase-10,fase-20 --objective setup --neighbourhood insertion --budget 24
+```
+
+Lo scenario deve essere *run-only* (nessun `setup_seconds` v0.2). Senza
+`--sequence` si parte da un ordine per scadenza che rispetta le precedenze; le
+fasi gia' completate, le scadenze fornitore e gli inizi fissi sono gestiti come
+descritto nel CHANGELOG. `stadi.json` contiene sequenza, prenotazioni, KPI e le
+eventuali violazioni dell'audit indipendente (codice di uscita 2 se non vuote).
+Non scrive mai sugli ingressi e non accede a Factory. Con `--backward --scenario-output adj.json` (ADR 005, opzione A) le
+lavorazioni vanno al piu' tardi e ogni attrezzaggio subito prima della sua
+lavorazione; il report include i gap residui.
+
+Con `--task-modes --scenario-output adj.json` si rispetta `mode` per task:
+`backward` e `auto` (regola `due_distance`, backward se la scadenza e' ad almeno
+`auto_backward_days` dall'inizio) ricevono l'opzione A; i task `forward` restano
+il piu' presto possibile. Un task backward senza scadenza e la regola `slack`
+sono rifiutati. Il report riporta `task_modes` (modo risolto per fase).
+
+Per riprodurre un piano backward da soli file: `planning-factory setup-stages
+adj.json contratto.json -o replay.json --replay stadi.json` usa lo scenario
+esportato (`adj.json`) e il report precedente (`stadi.json`, che contiene sequenza
+e rilasci dei setup), confronta esattamente le prenotazioni e rilancia l'audit.
+
+`--html report.html` aggiunge un report offline (nessuno script, valori escapati) con
+le barre di attrezzaggio e lavorazione per risorsa, le prenotazioni, i KPI, la
+distanza attrezzaggio→lavorazione del backward, le fasi non pianificate e le
+violazioni dell'audit.
+
+`--objective delivery|setup|flow --restarts N --seed S` (N da 0 a 8, solo ricerca in
+avanti) ripete la ricerca da piu' partenze deterministiche (ordine per scadenza, per
+stato, N perturbazioni con seme fisso) e tiene la migliore; il report riporta
+`multistart`. Con `--backward`, `--task-modes` o `--partial` l'opzione e' rifiutata.
+
+## Formato del report
+
+Il JSON scritto da `setup-stages -o` ha uno [schema versionato](../contracts/setup-stages-report-v1.schema.json)
+(chiavi obbligatorie `sequence`, `bookings`, `kpis`, `audit_violations`; le altre compaiono solo con l'opzione
+che le produce: `search`, `multistart`, `backward`, `just_in_time_tail`, `task_modes`, `unplanned`, `replay`).
+`kpis` e' `null` quando non e' definito (commesse senza alcuna fase pianificata). Un test applica lo schema ai
+report di tutte le modalita' e verifica che rifiuti report alterati. Il report di `staged-plan` aggiunge
+`mode`, `materials` ed `erp_publishable` ed e' descritto in [anteprima v0.3](v03-staged-file-preview.md).

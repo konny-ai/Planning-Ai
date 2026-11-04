@@ -143,6 +143,22 @@ dello scenario; `null` significa sconosciuto. Un setup può saltare soltanto con
 stato noto coincidente. `execution_rank` dichiara l'ordine dei task sulle macchine;
 non è dedotto dall'ordine delle righe. Non è un ottimizzatore di sequenza.
 
+## Direzione di pianificazione e ricerca di sequenza (ADR 005, opzione A)
+
+Nel percorso setup/run il foglio **Obiettivi e ricerca** (`objective`) accetta solo
+righe `kind = politica` con due codici, ciascuno al piu' una volta:
+
+| code | value | effetto |
+| --- | --- | --- |
+| `planning_direction` | `forward` (default) o `backward` | `backward`: dopo i controlli sui materiali, lavorazioni al piu' tardi possibile e attrezzaggio subito prima; si ritarda soltanto |
+| `sequence_objective` | `delivery`, `setup` o `gap` | richiede `backward`: cerca la sequenza macchina valutando ogni candidato sul proprio piano backward |
+
+Qualunque altra riga, un valore diverso, un codice ripetuto o `sequence_objective`
+senza `backward` viene rifiutato con un errore (un'impostazione non supportata non
+viene mai ignorata in silenzio), e `backward` fuori dal percorso setup/run e'
+rifiutato. L'evidenza del calcolo riporta `planning_direction` e la sequenza
+effettivamente usata (`machine_sequence`). Il piano resta non pubblicabile su ERP.
+
 ## Limiti di calcolo e dati conservati
 
 Il percorso standard mantiene le funzioni canoniche esistenti. Il percorso con

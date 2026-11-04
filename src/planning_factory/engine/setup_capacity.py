@@ -28,6 +28,36 @@ class StageBooking:
     allocations: tuple[StageAllocation, ...]
 
 
+def external_release_floors(tasks, edges) -> dict:
+    """Earliest run start imposed by completed history and supplier milestones.
+
+    The standard planner makes a successor wait for ``end + lag`` (FS) or ``start + lag`` (SS) of
+    a predecessor; a completed predecessor ends and starts at its ``completed_at``, so the lag
+    still binds after the edge itself is dropped from the stage scenario. A supplier milestone
+    only has a stated end: finish-to-start is ``external_end + lag``, while start-to-start has no
+    meaning without a start and fails closed. Neither kind of task takes a booking here.
+    """
+    floors = {}
+    for edge in edges:
+        pred = tasks[edge.predecessor]
+        succ = tasks[edge.successor]
+        if succ.external_end is not None or succ.completed_at is not None:
+            continue
+        if pred.completed_at is not None:
+            anchor = pred.completed_at
+        elif pred.external_end is not None:
+            if edge.kind != 'FS':
+                raise ValidationError([f'{edge.successor}: SS from supplier milestone '
+                                       f'{edge.predecessor} is not supported'])
+            anchor = pred.external_end
+        else:
+            continue
+        floor = anchor + timedelta(seconds=edge.lag_seconds)
+        if edge.successor not in floors or floors[edge.successor] < floor:
+            floors[edge.successor] = floor
+    return floors
+
+
 def audit_stage_capacity(contract: SetupContract, s: Scenario,
                          machine_sequence: tuple[str, ...],
                          bookings: tuple[StageBooking, ...], *,
@@ -45,8 +75,11 @@ def audit_stage_capacity(contract: SetupContract, s: Scenario,
     if any(o.setup_seconds for o in s.operations) or any(n.setup_seconds for n in s.nestings):
         raise ValidationError(['stage audit requires a run-only v0.2 scenario (no static setup to double-count)'])
     phases = {p.id: p for p in contract.phases}
-    if set(phases) != set(tasks):
-        raise ValidationError(['every compiled job/nesting task needs exactly one canonical phase'])
+    floors = external_release_floors(tasks, edges)
+    planned = {tid for tid, task in tasks.items() if task.external_end is None}
+    if set(phases) != planned:
+        raise ValidationError(['every compiled job/nesting task needs exactly one canonical phase '
+                               '(supplier milestones take none)'])
     if len(machine_sequence) != len(phases) or set(machine_sequence) != set(phases):
         raise ValidationError(['machine sequence must contain each task exactly once'])
     if any(rid not in {r.id for r in s.resources} for rid in
@@ -105,6 +138,10 @@ def audit_stage_capacity(contract: SetupContract, s: Scenario,
         phase = phases[pid]
         decision = decisions[pid]
         setup_required = decision.requires_setup and decision.setup_seconds > 0
+        if tasks[pid].completed_at is not None:
+            if (pid, 'setup') in records or (pid, 'run') in records:
+                errors.append(f'{pid}: completed phase must not carry new bookings')
+            continue
         if phase.setup_locked and setup_required and (pid, 'setup') not in frozen:
             # A flag alone is not evidence that the original setup was kept.
             errors.append(f'{pid}: locked setup requires frozen booking reference')
@@ -174,6 +211,11 @@ def audit_stage_capacity(contract: SetupContract, s: Scenario,
         if run and run.segments:
             if run.segments[0].start < tasks[pid].release:
                 errors.append(f'{pid}: processing starts before release or material availability')
+            if (tasks[pid].fixed_start is not None and (pid, 'run') not in frozen
+                    and run.segments[0].start != tasks[pid].fixed_start):
+                errors.append(f'{pid}: run does not start at its fixed_start')
+            if pid in floors and run.segments[0].start < floors[pid]:
+                errors.append(f'{pid}: processing starts before the completed/supplier milestone end plus lag')
             machine_ready = previous_machine_run_end.get(phase.machine_id)
             if machine_ready is not None:
                 if run.segments[0].start < machine_ready:

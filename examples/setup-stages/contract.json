@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "resources": [
+    {
+      "id": "LASER",
+      "kind": "machine"
+    },
+    {
+      "id": "OPERATORE",
+      "kind": "operator"
+    }
+  ],
+  "initial_machine_states": {
+    "LASER": "INOX-3MM"
+  },
+  "phases": [
+    {
+      "id": "job:taglio-a",
+      "machine_id": "LASER",
+      "target_state": "ACCIAIO-2MM",
+      "setup_seconds": 1800,
+      "setup_locked": false,
+      "setup_requirements": [
+        {
+          "kind": "machine",
+          "count": 1,
+          "occupancy_bps": 10000,
+          "candidate_ids": [
+            "LASER"
+          ]
+        },
+        {
+          "kind": "operator",
+          "count": 1,
+          "occupancy_bps": 5000,
+          "candidate_ids": [
+            "OPERATORE"
+          ]
+        }
+      ],
+      "run_requirements": [
+        {
+          "kind": "machine",
+          "count": 1,
+          "occupancy_bps": 10000,
+          "candidate_ids": [
+            "LASER"
+          ]
+        },
+        {
+          "kind": "operator",
+          "count": 1,
+          "occupancy_bps": 2500,
+          "candidate_ids": [
+            "OPERATORE"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "job:taglio-b",
+      "machine_id": "LASER",
+      "target_state": "INOX-3MM",
+      "setup_seconds": 1800,
+      "setup_locked": false,
+      "setup_requirements": [
+        {
+          "kind": "machine",
+          "count": 1,
+          "occupancy_bps": 10000,
+          "candidate_ids": [
+            "LASER"
+          ]
+        },
+        {
+          "kind": "operator",
+          "count": 1,
+          "occupancy_bps": 5000,
+          "candidate_ids": [
+            "OPERATORE"
+          ]
+        }
+      ],
+      "run_requirements": [
+        {
+          "kind": "machine",
+          "count": 1,
+          "occupancy_bps": 10000,
+          "candidate_ids": [
+            "LASER"
+          ]
+        },
+        {
+          "kind": "operator",
+          "count": 1,
+          "occupancy_bps": 2500,
+          "candidate_ids": [
+            "OPERATORE"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "job:taglio-c",
+      "machine_id": "LASER",
+      "target_state": "ACCIAIO-2MM",
+      "setup_seconds": 1800,
+      "setup_locked": false,
+      "setup_requirements": [
+        {
+          "kind": "machine",
+          "count": 1,
+          "occupancy_bps": 10000,
+          "candidate_ids": [
+            "LASER"
+          ]
+        },
+        {
+          "kind": "operator",
+          "count": 1,
+          "occupancy_bps": 5000,
+          "candidate_ids": [
+            "OPERATORE"
+          ]
+        }
+      ],
+      "run_requirements": [
+        {
+          "kind": "machine",
+          "count": 1,
+          "occupancy_bps": 10000,
+          "candidate_ids": [
+            "LASER"
+          ]
+        },
+        {
+          "kind": "operator",
+          "count": 1,
+          "occupancy_bps": 2500,
+          "candidate_ids": [
+            "OPERATORE"
+          ]
+        }
+      ]
+    }
+  ]
+}

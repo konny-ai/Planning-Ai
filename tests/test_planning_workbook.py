@@ -121,6 +121,63 @@ class WorkbookTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError,'unità base'):
             compile_tables(tables)
 
+    def test_objective_table_selects_backward_and_sequence_objective(self):
+        def tables(*rows):
+            value=bending_tables(unattended=True)
+            value['order'][0]['due']='2026-10-29T15:00:00Z'
+            value['objective']=[dict(id=f'O{i}',kind='politica',code=c,value=v,unit='scelta')
+                                for i,(c,v) in enumerate(rows)]
+            return value
+        _,_,forward=compile_tables(tables()).calculate()
+        scenario,result,backward=compile_tables(tables(('planning_direction','backward'))).calculate()
+        self.assertEqual((forward['planning_direction'],backward['planning_direction']),('forward','backward'))
+        self.assertEqual(verify_plan(scenario,result),())
+        start=lambda e,s:next(b for b in e['stage_bookings'] if b['stage']==s)['segments'][0]['start']
+        self.assertGreater(start(backward,'run'),start(forward,'run'))      # run moved later
+        self.assertGreaterEqual(start(backward,'setup'),start(forward,'setup'))
+        self.assertTrue(backward['erp_publishable'] is False)
+        _,_,searched=compile_tables(tables(('planning_direction','backward'),
+                                           ('sequence_objective','setup'))).calculate()
+        self.assertEqual(searched['machine_sequence'],forward['machine_sequence'])
+
+    def test_objective_table_rejects_unsupported_or_inconsistent_rows(self):
+        base_rows=lambda *rows:dict(bending_tables(unattended=True),objective=[
+            dict(id=f'O{i}',kind=k,code=c,value=v,unit='scelta') for i,(k,c,v) in enumerate(rows)])
+        cases=((('politica','planning_direction','sideways'),'valore ammesso'),
+               (('budget','max_evaluations','10'),'impostazione non supportata'),
+               (('obiettivo','planning_direction','backward'),'impostazione non supportata'),   # right code, wrong kind
+               (('politica','not_a_setting','backward'),'impostazione non supportata'),       # right kind, wrong code
+               (('politica','sequence_objective','setup'),'richiede planning_direction'),
+               (('politica','sequence_objective','flow'),'valore ammesso'))
+        for row,message in cases:
+            with self.subTest(row=row),self.assertRaisesRegex(ValidationError,message):
+                compile_tables(base_rows(row)).calculate()
+        with self.assertRaisesRegex(ValidationError,'più di una volta'):
+            compile_tables(base_rows(('politica','planning_direction','backward'),
+                                     ('politica','planning_direction','backward')))
+
+    def test_objective_policy_survives_a_real_xlsx_roundtrip(self):
+        # The policy was first proven only on in-memory tables; this writes and rereads a real file.
+        def tables(rows):
+            value=bending_tables(unattended=True)
+            value['order'][0]['due']='2026-10-29T15:00:00Z'
+            value['objective']=rows
+            return value
+        policy=[dict(id='O1',kind='politica',code='planning_direction',value='backward',unit='scelta'),
+                dict(id='O2',kind='politica',code='sequence_objective',value='setup',unit='scelta')]
+        starts={}
+        with tempfile.TemporaryDirectory() as folder:
+            for label,rows in (('forward',[]),('backward',policy)):
+                path=Path(folder)/f'{label}.xlsx'
+                write_tables(path,tables(rows))
+                scenario,result,evidence=load_workbook(path).calculate()
+                self.assertEqual(verify_plan(scenario,result),())
+                self.assertEqual(evidence['planning_direction'],label)
+                self.assertEqual(evidence['machine_sequence'],['job:BEND'])
+                starts[label]={b['stage']:b['segments'][0]['start'] for b in evidence['stage_bookings']}
+        self.assertGreater(starts['backward']['run'],starts['forward']['run'])
+        self.assertGreaterEqual(starts['backward']['setup'],starts['forward']['setup'])
+
     def test_original_source_age_and_scoped_corrections_survive(self):
         tables=bending_tables()
         tables['source'][0]['extracted_at']='2026-10-25T07:00:00Z'

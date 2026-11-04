@@ -17,6 +17,34 @@ from .engine.setup_search import search_setup_alternatives
 from . import canonical_cli, workbook_cli
 
 
+def _write_stage_html(path, report, *, protected):
+    from .adapters.stage_report import stage_html_report
+    from .engine.setup_capacity import StageAllocation, StageBooking
+    from .domain.models import Interval
+    from .adapters.json_io import timestamp
+    target = Path(path).resolve()
+    if target in protected:
+        raise ValidationError(['--html must not overwrite an input or another output'])
+    bookings = tuple(StageBooking(
+        b['phase_id'], b['stage'],
+        tuple(Interval(timestamp(i['start']), timestamp(i['end'])) for i in b['segments']),
+        tuple(StageAllocation(a['resource_id'], a['occupancy_bps']) for a in b['allocations']))
+        for b in report['bookings'])
+    back = report.get('backward') or {}
+    Path(path).write_text(stage_html_report(
+        bookings, sequence=tuple(report.get('sequence', ())), kpis=report.get('kpis'),
+        unplanned=tuple(report.get('unplanned', ())),
+        setup_gaps=tuple(sorted((back.get('setup_gaps_seconds') or {}).items())),
+        audit_violations=tuple(report.get('audit_violations', ()))), encoding='utf-8')
+
+
+def _bookings_json(bookings):
+    return [{'phase_id': b.phase_id, 'stage': b.stage,
+             'segments': [{'start': i.start.isoformat(), 'end': i.end.isoformat()} for i in b.segments],
+             'allocations': [{'resource_id': a.resource_id, 'occupancy_bps': a.occupancy_bps}
+                             for a in b.allocations]} for b in bookings]
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog='planning-factory')
     sub = parser.add_subparsers(dest='command', required=True)
@@ -69,6 +97,41 @@ def main(argv=None) -> int:
     setup_plan.add_argument('--budget', type=int, default=12, help='Repair iterations, 1..32')
     setup_plan.add_argument('--html')
     setup_plan.add_argument('--csv')
+    stages = sub.add_parser('setup-stages', help='Plan setup and run as separate audited stages (ADR 003, opt-in)')
+    stages.add_argument('scenario', help='Run-only scenario JSON (no v0.2 setup_seconds)')
+    stages.add_argument('contract', help='Canonical setup contract v1 JSON')
+    stages.add_argument('-o', '--output', required=True, help='Stage plan JSON: sequence, bookings, KPIs, audit')
+    stages.add_argument('--sequence', help='Comma-separated phase order; default: earliest due date, precedence-safe')
+    stages.add_argument('--start', choices=('edd', 'state-grouped', 'best'), default='edd',
+                        help='Default start order when --sequence is absent; state-grouped falls back to edd if infeasible; best needs --objective and keeps the better of the two')
+    stages.add_argument('--objective', choices=('delivery', 'setup', 'flow', 'gap'),
+                        help='Optional bounded sequence search for this explicit objective')
+    stages.add_argument('--neighbourhood', choices=('swap', 'insertion'), default='swap')
+    stages.add_argument('--just-in-time-tail', action='store_true',
+                        help='First part of --backward (ADR 005): delay runs by the room they have, setups stay early; needs --scenario-output')
+    stages.add_argument('--backward', action='store_true',
+                        help='ADR 005 option A: runs as late as possible, each setup right before its run, machine sequence fixed first; needs --scenario-output')
+    stages.add_argument('--task-modes', action='store_true',
+                        help='Honour per-task mode forward/backward/auto (auto: due_distance rule); backward tasks get ADR 005 option A; needs --scenario-output')
+    stages.add_argument('--replay', metavar='REPORT',
+                        help='Reproduce a previous setup-stages report on the exported scenario: same sequence and setup releases, exact comparison of the bookings, new audit')
+    stages.add_argument('--partial', action='store_true',
+                        help='ADR 006 option B: plan what has candidate resources and report the rest as not planned (NO_CANDIDATE, PREDECESSOR_UNPLANNED, NEST_MEMBER_UNPLANNED); may add --backward')
+    stages.add_argument('--no-candidate', default='',
+                        help='With --partial: comma-separated operation IDs to treat as having no candidate resource')
+    stages.add_argument('--html', help='Offline HTML report of the stage plan (Gantt, gaps, unplanned phases, audit)')
+    stages.add_argument('--scenario-output', help='Scenario JSON with the derived run releases of --backward, --just-in-time-tail or --task-modes')
+    stages.add_argument('--restarts', type=int, default=0,
+                        help='With --objective (forward search): extra deterministic perturbed starts, 0..8; also tries the state-grouped start')
+    stages.add_argument('--seed', type=int, default=0, help='Seed of the perturbed starts')
+    stages.add_argument('--budget', type=int, default=24, help='Sequence evaluations, 1..256')
+    stages.add_argument('--max-alternatives', type=int, default=32)
+    staged = sub.add_parser('staged-plan', help='Material gates + setup/run stages (+ optional backward) from a v0.3 JSON spec')
+    staged.add_argument('scenario', help='Scenario JSON; the spec must name its exact SHA-256 digest')
+    staged.add_argument('spec', help='v0.3 staged specification JSON (docs/v03-staged-file-preview.md)')
+    staged.add_argument('-o', '--output', required=True, help='Report JSON: materials, sequence, bookings, KPIs, audit')
+    staged.add_argument('--html', help='Offline HTML report (Gantt, gaps, audit)')
+    staged.add_argument('--scenario-output', help='Scenario JSON after the material gates and any backward releases')
     setups = sub.add_parser('audit-setups', help='Audit explicit sequence-changeover rules against a plan')
     setups.add_argument('scenario')
     setups.add_argument('plan')
@@ -239,6 +302,273 @@ def main(argv=None) -> int:
                          'setup_audit': result.setup_audit.to_dict(),
                          'time_limit_reached': result.time_limit_reached}), end='')
             return 0 if result.setup_audit.valid and not result.plan.unscheduled else 2
+        if args.command == 'staged-plan':
+            from .adapters.staged_file import calculate_staged_preview, load_staged_file
+            from .engine.setup_capacity import audit_stage_capacity
+            from .engine.setup_sequence_search import sequence_metrics
+            outputs = [Path(p).resolve() for p in (args.output, args.html, args.scenario_output) if p]
+            inputs = {Path(args.scenario).resolve(), Path(args.spec).resolve()}
+            if len(set(outputs)) != len(outputs) or inputs & set(outputs):
+                raise ValidationError(['staged-plan outputs must be distinct and must not overwrite inputs'])
+            request = load_staged_file(Path(args.spec), scenario)
+            result = calculate_staged_preview(scenario, request)   # fail-closed: material shortage, audit, ...
+            sequence = result.machine_sequence or request.machine_sequence
+            violations = ()
+            if request.mode == 'normal':   # paused/holds plan on a normalized contract, audited inside
+                violations = audit_stage_capacity(
+                    request.setup_contract, result.material_scenario, sequence, result.staged.bookings,
+                    frozen_bookings=request.frozen_bookings)
+            try:
+                kpis = sequence_metrics(result.material_scenario, result.staged).as_dict()
+            except ValidationError:
+                kpis = None
+            report = {
+                'mode': request.mode, 'sequence': list(sequence),
+                'bookings': _bookings_json(result.staged.bookings), 'kpis': kpis,
+                'audit_violations': list(violations), 'unplanned': [],
+                'materials': {
+                    'pegs': [{'task_id': p.task_id, 'item_id': p.item_id, 'supply_id': p.supply_id,
+                              'quantity': str(p.quantity)} for p in result.allocation.pegs],
+                    'shortages': [[task, item, str(quantity)] for task, item, quantity in result.allocation.shortages]},
+                'erp_publishable': False}
+            if result.backward is not None:
+                report['backward'] = {
+                    'option': 'A', 'delayed_runs': [{'phase_id': p, 'seconds': s} for p, s in result.backward.delayed_runs],
+                    'setup_gaps_seconds': dict(result.backward.setup_gaps),
+                    'setup_releases': {p: r.isoformat() for p, r in result.backward.setup_releases}}
+            Path(args.output).write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+            if args.scenario_output:
+                Path(args.scenario_output).write_text(dumps(result.material_scenario), encoding='utf-8')
+            if args.html:
+                _write_stage_html(args.html, report, protected=set(inputs) | {Path(args.output).resolve()})
+            print(json.dumps({'mode': request.mode, 'sequence': report['sequence'], 'kpis': kpis,
+                              'shortages': report['materials']['shortages'],
+                              'audit_violations': report['audit_violations']}, sort_keys=True))
+            return 0 if not violations else 2
+        if args.command == 'setup-stages':
+            from .domain.setup_contract import load_setup_contract
+            from .engine.setup_capacity import audit_stage_capacity
+            from .engine.setup_sequence_search import (
+                default_machine_sequence, optimize_setup_sequence, sequence_metrics)
+            from .engine.setup_stage_scheduler import schedule_setup_stages
+            if Path(args.output).resolve() in {Path(args.scenario).resolve(), Path(args.contract).resolve()}:
+                raise ValidationError(['setup-stages output must not overwrite its inputs'])
+            contract = load_setup_contract(Path(args.contract).read_text(encoding='utf-8'))
+            if args.partial:
+                from .engine.setup_partial import plan_setup_stages_partial
+                if any((args.replay, args.just_in_time_tail, args.task_modes, args.objective)):
+                    raise ValidationError(['--partial can only be combined with --backward, --sequence and --no-candidate'])
+                if args.backward:
+                    if not args.scenario_output:
+                        raise ValidationError(['--backward requires --scenario-output'])
+                    if Path(args.scenario_output).resolve() in {Path(args.scenario).resolve(), Path(args.contract).resolve(), Path(args.output).resolve()}:
+                        raise ValidationError(['--scenario-output must be a distinct new file'])
+                given = tuple(x for x in args.sequence.split(',') if x) if args.sequence else None
+                extra = tuple(x for x in args.no_candidate.split(',') if x)
+                part = plan_setup_stages_partial(scenario, contract, given, extra_without_candidates=extra,
+                                                 backward=args.backward, max_alternatives=args.max_alternatives)
+                report = {'unplanned': [{'operation_id': u.operation_id, 'code': u.code, 'detail': u.detail}
+                                        for u in part.unplanned],
+                          'sequence': list(part.machine_sequence), 'bookings': [], 'kpis': None,
+                          'audit_violations': []}
+                if part.staged is not None:
+                    violations = audit_stage_capacity(part.contract, part.scenario, part.machine_sequence,
+                                                      part.staged.bookings)
+                    report.update(bookings=_bookings_json(part.staged.bookings),
+                                  audit_violations=list(violations))
+                    try:
+                        report['kpis'] = sequence_metrics(part.scenario, part.staged).as_dict()
+                    except ValidationError:
+                        report['kpis'] = None  # some orders have no planned task: KPIs not defined
+                    if part.backward is not None:
+                        report['backward'] = {'option': 'A', 'delayed_runs': [
+                            {'phase_id': p, 'seconds': s} for p, s in part.backward.delayed_runs],
+                            'setup_gaps_seconds': dict(part.backward.setup_gaps),
+                            'setup_releases': {p: r.isoformat() for p, r in part.backward.setup_releases}}
+                if args.backward:   # always written when asked for, even with nothing plannable
+                    Path(args.scenario_output).write_text(dumps(part.scenario), encoding='utf-8')
+                Path(args.output).write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+                if args.html:
+                    _write_stage_html(args.html, report, protected={Path(p).resolve() for p in (
+                        args.scenario, args.contract, args.output, args.scenario_output, args.replay) if p})
+                print(json.dumps({'planned': sorted({b['phase_id'] for b in report['bookings']}),
+                                  'unplanned': report['unplanned'],
+                                  'audit_violations': report['audit_violations']}, sort_keys=True))
+                return 0 if not report['audit_violations'] else 2
+            if args.replay:
+                from datetime import datetime
+                if any((args.backward, args.just_in_time_tail, args.task_modes, args.objective, args.sequence)):
+                    raise ValidationError(['--replay cannot be combined with other planning options'])
+                previous = json.loads(Path(args.replay).read_text(encoding='utf-8'))
+                backward_part = previous.get('backward', {}) if isinstance(previous, dict) else None
+                stored = backward_part.get('setup_releases', {}) if isinstance(backward_part, dict) else None
+                if (not isinstance(previous, dict) or not isinstance(previous.get('sequence'), list)
+                        or not all(isinstance(x, str) for x in previous['sequence'])
+                        or not isinstance(previous.get('bookings'), list)
+                        or not isinstance(backward_part, dict) or not isinstance(stored, dict)
+                        or not all(isinstance(k, str) and isinstance(v, str) for k, v in stored.items())):
+                    raise ValidationError(['--replay needs a report written by setup-stages (a sequence of '
+                                           'IDs, bookings, and setup_releases mapping IDs to timestamps)'])
+                if Path(args.output).resolve() == Path(args.replay).resolve():
+                    raise ValidationError(['--replay output must not overwrite the report being replayed'])
+                sequence = tuple(previous['sequence'])
+                try:
+                    releases = {pid: datetime.fromisoformat(v) for pid, v in stored.items()}
+                except ValueError:
+                    raise ValidationError(['--replay: setup_releases must be ISO 8601 timestamps']) from None
+                if any(v.tzinfo is None for v in releases.values()):
+                    raise ValidationError(['--replay: setup_releases need a UTC offset'])
+                solution = schedule_setup_stages(scenario, contract, sequence,
+                                                 max_alternatives=args.max_alternatives,
+                                                 setup_releases=releases)
+                violations = audit_stage_capacity(contract, scenario, sequence, solution.bookings)
+                matches = _bookings_json(solution.bookings) == previous['bookings']
+                report = {'sequence': list(sequence), 'bookings': _bookings_json(solution.bookings),
+                          'kpis': sequence_metrics(scenario, solution).as_dict(),
+                          'audit_violations': list(violations),
+                          'replay': {'matches_previous_bookings': matches, 'setup_releases': len(releases)}}
+                Path(args.output).write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+                if args.html:
+                    _write_stage_html(args.html, report, protected={Path(p).resolve() for p in (
+                        args.scenario, args.contract, args.output, args.scenario_output, args.replay) if p})
+                print(json.dumps({'replay_matches': matches, 'audit_violations': report['audit_violations']}, sort_keys=True))
+                return 0 if matches and not violations else 2
+            sequence = (tuple(x for x in args.sequence.split(',') if x)
+                        if args.sequence else default_machine_sequence(scenario))
+            if args.start == 'best' and not args.sequence:
+                if not args.objective:
+                    raise ValidationError(['--start best requires --objective'])
+                from .engine.setup_sequence_search import best_start_sequence
+                sequence = best_start_sequence(scenario, contract, objective=args.objective,
+                                               max_alternatives=args.max_alternatives)
+            if args.start == 'state-grouped' and not args.sequence:
+                from .engine.setup_sequence_search import state_grouped_sequence
+                try:
+                    candidate = state_grouped_sequence(scenario, contract, sequence)
+                    schedule_setup_stages(scenario, contract, candidate,
+                                          max_alternatives=args.max_alternatives)
+                    sequence = candidate
+                except ValidationError:
+                    pass  # infeasible grouping: keep the due-date order
+            if args.restarts and not args.objective:
+                raise ValidationError(['--restarts requires --objective'])
+            if args.restarts and (args.task_modes or args.partial):
+                raise ValidationError(['--restarts is only available for the sequence search '
+                                       '(not with --task-modes or --partial)'])
+            search = None
+            backward_search = None
+            if args.objective and args.backward:
+                from .engine.setup_sequence_search import optimize_backward_sequence
+                if args.restarts:
+                    from .engine.setup_sequence_search import optimize_backward_sequence_multistart
+                    multi = optimize_backward_sequence_multistart(
+                        scenario, contract, objective=args.objective, restarts=args.restarts, seed=args.seed,
+                        max_evaluations=args.budget, max_alternatives=args.max_alternatives,
+                        neighbourhood=args.neighbourhood)
+                    backward_search = multi.best
+                else:
+                    backward_search = optimize_backward_sequence(
+                        scenario, contract, sequence, objective=args.objective, max_evaluations=args.budget,
+                        max_alternatives=args.max_alternatives, neighbourhood=args.neighbourhood)
+                sequence = backward_search.sequence
+                solution = backward_search.result.solution
+            elif args.objective and args.restarts:
+                from .engine.setup_sequence_search import optimize_setup_sequence_multistart
+                multi = optimize_setup_sequence_multistart(
+                    scenario, contract, objective=args.objective, restarts=args.restarts, seed=args.seed,
+                    max_evaluations=args.budget, max_alternatives=args.max_alternatives,
+                    neighbourhood=args.neighbourhood)
+                search = multi.best
+                solution, sequence = search.winner, search.sequence
+            elif args.objective:
+                search = optimize_setup_sequence(
+                    scenario, contract, sequence, objective=args.objective, max_evaluations=args.budget,
+                    max_alternatives=args.max_alternatives, neighbourhood=args.neighbourhood)
+                solution, sequence = search.winner, search.sequence
+            elif not args.task_modes:
+                solution = schedule_setup_stages(scenario, contract, sequence,
+                                                 max_alternatives=args.max_alternatives)
+            audit_scenario, jit, back, modes = scenario, None, None, None
+            if args.task_modes:
+                from .engine.setup_sequence_search import plan_setup_stages_by_mode
+                if args.backward or args.just_in_time_tail or args.objective:
+                    raise ValidationError(['--task-modes cannot be combined with --backward, '
+                                           '--just-in-time-tail or --objective'])
+                if not args.scenario_output:
+                    raise ValidationError(['--task-modes requires --scenario-output'])
+                protected = {Path(args.scenario).resolve(), Path(args.contract).resolve(), Path(args.output).resolve()}
+                if Path(args.scenario_output).resolve() in protected:
+                    raise ValidationError(['--scenario-output must be a distinct new file'])
+                aware = plan_setup_stages_by_mode(scenario, contract, sequence,
+                                                  max_alternatives=args.max_alternatives)
+                back, modes = aware.result, dict(aware.modes)
+                solution, audit_scenario = back.solution, back.scenario
+                Path(args.scenario_output).write_text(dumps(audit_scenario), encoding='utf-8')
+            if args.backward:
+                from .engine.setup_sequence_search import backward_setup_before_run
+                if args.just_in_time_tail:
+                    raise ValidationError(['--backward already includes --just-in-time-tail: use one of them'])
+                if not args.scenario_output:
+                    raise ValidationError(['--backward requires --scenario-output'])
+                protected = {Path(args.scenario).resolve(), Path(args.contract).resolve(), Path(args.output).resolve()}
+                if Path(args.scenario_output).resolve() in protected:
+                    raise ValidationError(['--scenario-output must be a distinct new file'])
+                back = (backward_search.result if backward_search is not None else
+                        backward_setup_before_run(scenario, contract, sequence,
+                                                  max_alternatives=args.max_alternatives))
+                solution, audit_scenario = back.solution, back.scenario
+                Path(args.scenario_output).write_text(dumps(audit_scenario), encoding='utf-8')
+            if args.just_in_time_tail:
+                from .engine.setup_sequence_search import just_in_time_tail
+                if not args.scenario_output:
+                    raise ValidationError(['--just-in-time-tail requires --scenario-output'])
+                protected = {Path(args.scenario).resolve(), Path(args.contract).resolve(), Path(args.output).resolve()}
+                if Path(args.scenario_output).resolve() in protected:
+                    raise ValidationError(['--scenario-output must be a distinct new file'])
+                jit = just_in_time_tail(scenario, contract, sequence, max_alternatives=args.max_alternatives)
+                solution, audit_scenario = jit.solution, jit.scenario
+                Path(args.scenario_output).write_text(dumps(audit_scenario), encoding='utf-8')
+            violations = audit_stage_capacity(contract, audit_scenario, sequence, solution.bookings)
+            report = {
+                'sequence': list(sequence),
+                'bookings': _bookings_json(solution.bookings),
+                'kpis': sequence_metrics(audit_scenario, solution).as_dict(),
+                'audit_violations': list(violations),
+            }
+            if modes is not None:
+                report['task_modes'] = modes
+            if back is not None:
+                report['backward'] = {
+                    'option': 'A', 'delayed_runs': [{'phase_id': p, 'seconds': s} for p, s in back.delayed_runs],
+                    'setup_gaps_seconds': {p: g for p, g in back.setup_gaps},
+                    'setup_releases': {p: r.isoformat() for p, r in back.setup_releases},
+                    'baseline': back.baseline.as_dict()}
+            if jit is not None:
+                report['just_in_time_tail'] = {
+                    'experimental': True, 'delayed': [{'phase_id': p, 'seconds': s} for p, s in jit.delayed],
+                    'rejected': list(jit.rejected), 'baseline': jit.baseline.as_dict()}
+            if backward_search is not None:
+                report['search'] = {'objective': backward_search.objective, 'evaluated': backward_search.evaluated,
+                                    'rejected': backward_search.rejected, 'improved': backward_search.improved,
+                                    'evaluated_on': 'backward plan',
+                                    'baseline': backward_search.baseline.as_dict(),
+                                    'baseline_gap_seconds': backward_search.baseline_gap_seconds,
+                                    'selected_gap_seconds': backward_search.selected_gap_seconds}
+            if args.restarts and (search is not None or backward_search is not None):
+                report['multistart'] = {'starts': len(multi.starts), 'best_start_index': multi.best_start_index,
+                                        'evaluated': multi.evaluated, 'rejected_starts': multi.rejected_starts,
+                                        'seed': args.seed}
+            if search is not None:
+                report['search'] = {'objective': search.objective, 'evaluated': search.evaluated,
+                                    'rejected': search.rejected, 'improved': search.improved,
+                                    'baseline': search.baseline.as_dict()}
+            Path(args.output).write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+            if args.html:
+                _write_stage_html(args.html, report, protected={Path(p).resolve() for p in (
+                    args.scenario, args.contract, args.output, args.scenario_output, args.replay) if p})
+            print(json.dumps({'sequence': report['sequence'], 'kpis': report['kpis'],
+                              'audit_violations': report['audit_violations']}, sort_keys=True))
+            return 0 if not violations else 2
         if args.command == 'setup-plan':
             rules = load_setup_rules(Path(args.rules).read_text(encoding='utf-8'), scenario)
             result = plan_with_setups(scenario, rules, budget=args.budget)
@@ -382,6 +712,6 @@ def main(argv=None) -> int:
             summary['time_limit_reached'] = searched.time_limit_reached
         print(json.dumps(summary))
         return 2 if result.unscheduled else 0
-    except (ValidationError, OSError, KeyError, TypeError, ValueError) as exc:
+    except (ValidationError, OSError, KeyError, TypeError, ValueError, ArithmeticError) as exc:   # incl. OverflowError, decimal errors
         print(json.dumps({'error': str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 1
