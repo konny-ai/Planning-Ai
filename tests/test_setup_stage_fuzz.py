@@ -12,7 +12,8 @@ from planning_factory.domain.setup_contract import load_setup_contract
 from planning_factory.domain.validation import ValidationError
 from planning_factory.engine.setup_capacity import audit_stage_capacity
 from planning_factory.engine.setup_sequence_search import (
-    default_machine_sequence, optimize_setup_sequence,
+    best_start_sequence, default_machine_sequence, just_in_time_tail,
+    optimize_setup_sequence, sequence_metrics, state_grouped_sequence,
 )
 from planning_factory.engine.setup_stage_scheduler import schedule_setup_stages
 from planning_factory.engine.verification import verify_plan
@@ -86,6 +87,39 @@ class StageFuzzTests(unittest.TestCase):
                                                       search.winner.bookings), ())
                 self.assertLessEqual(search.selected.setup_seconds, search.baseline.setup_seconds)
         self.assertGreater(planned, 20, 'fuzz must exercise real plans, not only rejections')
+
+    def test_best_start_grouped_and_just_in_time_never_break_the_audit(self):
+        checked = delayed_any = 0
+        for seed in range(120):
+            rng = random.Random(1000 + seed)
+            try:
+                s, data = build(rng)
+                if not data['phases']:
+                    continue
+                contract = load_setup_contract(json.dumps(data))
+                edd = default_machine_sequence(s)
+                schedule_setup_stages(s, contract, edd)  # must be feasible to compare
+                best = best_start_sequence(s, contract, objective='setup')
+                grouped = state_grouped_sequence(s, contract, edd)
+            except ValidationError:
+                continue
+            checked += 1
+            with self.subTest(seed=seed):
+                self.assertEqual(sorted(best), sorted(edd))
+                self.assertEqual(sorted(grouped), sorted(edd))
+                base = sequence_metrics(s, schedule_setup_stages(s, contract, edd)).setup_seconds
+                chosen = sequence_metrics(s, schedule_setup_stages(s, contract, best)).setup_seconds
+                self.assertLessEqual(chosen, base)
+                jit = just_in_time_tail(s, contract, best)
+                self.assertEqual(audit_stage_capacity(contract, jit.scenario, best,
+                                                      jit.solution.bookings), ())
+                self.assertEqual(verify_plan(jit.solution.scenario, jit.solution.plan), ())
+                self.assertLessEqual(jit.selected.tardiness_seconds, jit.baseline.tardiness_seconds)
+                self.assertLessEqual(jit.selected.late_orders, jit.baseline.late_orders)
+                self.assertEqual(jit.selected.setup_seconds, jit.baseline.setup_seconds)
+                delayed_any += bool(jit.delayed)
+        self.assertGreater(checked, 20)
+        self.assertGreater(delayed_any, 0, 'just-in-time must be exercised, not only skipped')
 
 
 if __name__ == '__main__':
