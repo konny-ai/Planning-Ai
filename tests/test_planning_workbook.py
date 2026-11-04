@@ -154,6 +154,28 @@ class WorkbookTests(unittest.TestCase):
             compile_tables(base_rows(('politica','planning_direction','backward'),
                                      ('politica','planning_direction','backward')))
 
+    def test_objective_policy_survives_a_real_xlsx_roundtrip(self):
+        # The policy was first proven only on in-memory tables; this writes and rereads a real file.
+        def tables(rows):
+            value=bending_tables(unattended=True)
+            value['order'][0]['due']='2026-10-29T15:00:00Z'
+            value['objective']=rows
+            return value
+        policy=[dict(id='O1',kind='politica',code='planning_direction',value='backward',unit='scelta'),
+                dict(id='O2',kind='politica',code='sequence_objective',value='setup',unit='scelta')]
+        starts={}
+        with tempfile.TemporaryDirectory() as folder:
+            for label,rows in (('forward',[]),('backward',policy)):
+                path=Path(folder)/f'{label}.xlsx'
+                write_tables(path,tables(rows))
+                scenario,result,evidence=load_workbook(path).calculate()
+                self.assertEqual(verify_plan(scenario,result),())
+                self.assertEqual(evidence['planning_direction'],label)
+                self.assertEqual(evidence['machine_sequence'],['job:BEND'])
+                starts[label]={b['stage']:b['segments'][0]['start'] for b in evidence['stage_bookings']}
+        self.assertGreater(starts['backward']['run'],starts['forward']['run'])
+        self.assertGreaterEqual(starts['backward']['setup'],starts['forward']['setup'])
+
     def test_original_source_age_and_scoped_corrections_survive(self):
         tables=bending_tables()
         tables['source'][0]['extracted_at']='2026-10-25T07:00:00Z'

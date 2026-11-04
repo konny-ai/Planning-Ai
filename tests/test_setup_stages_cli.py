@@ -320,6 +320,20 @@ class SetupStagesCliTests(unittest.TestCase):
             self.assertEqual(report['kpis']['setup_seconds'], 1800)
             self.assertEqual(report['backward']['option'], 'A')
 
+    def test_partial_backward_writes_the_scenario_even_when_nothing_is_plannable(self):
+        from planning_factory.adapters.json_io import loads
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src, con = self._files(root)
+            out, adj = root / 'o.json', root / 'adj.json'
+            code, _ = run('setup-stages', str(src), str(con), '-o', str(out), '--partial', '--backward',
+                          '--no-candidate', 'a,b,c', '--scenario-output', str(adj))
+            self.assertEqual(code, 0)
+            report = json.loads(out.read_text(encoding='utf-8'))
+            self.assertEqual((report['bookings'], report['kpis'], len(report['unplanned'])), ([], None, 3))
+            self.assertTrue(adj.exists())                       # the file the command asked for
+            self.assertEqual(loads(adj.read_text(encoding='utf-8')).operations, ())
+
     def test_refuses_to_overwrite_inputs(self):
         with TemporaryDirectory() as tmp:
             src, con = self._files(Path(tmp))

@@ -24,6 +24,14 @@ l'eviction non puo' piu' fallire con una chiave gia' rimossa. Non applicati: div
 `setup_sequence_search.py` (819 righe) e l'handler `setup-stages` della CLI (~215 righe): sono
 refactoring ampi senza cambiamento di comportamento.
 
+## Non rilasciato — quinta passata (CLI parziale e workbook)
+
+`setup-stages --partial --backward --scenario-output` scrive ora il file richiesto anche quando nulla e'
+pianificabile (prima lo pretendeva senza crearlo); il report con nessuna fase pianificata resta valido
+rispetto allo schema (`kpis` nullo). La politica `objective` del workbook e' provata su un vero file `.xlsx`
+scritto e riletto (prima solo da tabelle in memoria): backward piu' tardi, attrezzaggio non anticipato,
+sequenza nell'evidenza. Test per entrambi.
+
 ## Non rilasciato — correzione dalla quarta revisione (piano parziale)
 
 `--no-candidate` / `extra_without_candidates` rifiutano ora le operazioni gia' completate e i

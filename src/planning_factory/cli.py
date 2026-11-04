@@ -385,7 +385,8 @@ def main(argv=None) -> int:
                             {'phase_id': p, 'seconds': s} for p, s in part.backward.delayed_runs],
                             'setup_gaps_seconds': dict(part.backward.setup_gaps),
                             'setup_releases': {p: r.isoformat() for p, r in part.backward.setup_releases}}
-                        Path(args.scenario_output).write_text(dumps(part.scenario), encoding='utf-8')
+                if args.backward:   # always written when asked for, even with nothing plannable
+                    Path(args.scenario_output).write_text(dumps(part.scenario), encoding='utf-8')
                 Path(args.output).write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
                 if args.html:
                     _write_stage_html(args.html, report, protected={Path(p).resolve() for p in (
