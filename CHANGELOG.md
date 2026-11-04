@@ -1,11 +1,18 @@
 # Changelog
 
+## Non rilasciato — backward nel workbook Excel
+
+Il foglio `objective` (prima sempre rifiutato) accetta righe `kind = politica` con
+`planning_direction` (`forward`/`backward`) e `sequence_objective`
+(`delivery`/`setup`/`gap`, richiede backward) per il percorso setup/run; ogni altra
+riga resta rifiutata con errore. L'evidenza riporta `planning_direction` e
+`machine_sequence`. Documentato in `docs/planning-workbook.md`.
+
 ## Non rilasciato — backward nel file staged v0.3
 
 Il file JSON dell'anteprima v0.3 accetta `backward` (booleano esplicito) e
 `sequence_objective` (`delivery`/`setup`/`gap`, richiede `backward`), che attivano
-l'opzione A dopo i gate dei materiali. Nessun cambiamento senza i campi. Il flusso
-Excel (workbook) non e' ancora collegato: richiede una voce di politica dedicata.
+l'opzione A dopo i gate dei materiali. Nessun cambiamento senza i campi. 
 
 ## Non rilasciato — riproducibilità: `setup-stages --replay`
 

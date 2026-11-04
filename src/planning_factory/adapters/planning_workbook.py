@@ -35,7 +35,7 @@ COUNTS = ('setup_machine_count', 'setup_operator_count', 'run_machine_count', 'r
 QUOTAS = ('setup_machine_utilization', 'setup_operator_utilization', 'run_machine_utilization', 'run_operator_utilization')
 RESOURCE_FIELDS = frozenset((*COUNTS, *QUOTAS))
 UNSUPPORTED = frozenset(('transport', 'production_link', 'material_reservation', 'previous_segment',
-                         'previous_member', 'previous_demand', 'qualification', 'attendance_window', 'objective',
+                         'previous_member', 'previous_demand', 'qualification', 'attendance_window',
                          'status_mapping', 'identity_binding', 'field_precedence'))
 NUMERIC_TOLERANCE = Decimal('0.000000001')
 
@@ -294,7 +294,37 @@ def _canonical_records(tables, zone):
     return records
 
 
+STAGE_POLICIES = {'planning_direction': ('forward', 'backward'),
+                  'sequence_objective': ('delivery', 'setup', 'gap')}
+
+
+def stage_policy(tables):
+    """(backward, sequence_objective) from the `objective` table, strictly validated.
+
+    Only kind=politica rows with code planning_direction (forward|backward) and
+    sequence_objective (delivery|setup|gap) are supported, each at most once; the
+    objective needs backward. Any other row stays rejected: an unsupported
+    setting must never be silently ignored.
+    """
+    chosen = {}
+    for row in tables.get('objective', []):
+        code, value = row.get('code'), row.get('value')
+        if row.get('kind') != 'politica' or code not in STAGE_POLICIES:
+            _error('objective', 'impostazione non supportata: ammessi solo politica '
+                                'planning_direction e sequence_objective')
+        if value not in STAGE_POLICIES[code]:
+            _error('objective', f'{code}: valore ammesso {" | ".join(STAGE_POLICIES[code])}')
+        if code in chosen:
+            _error('objective', f'{code}: dichiarato più di una volta')
+        chosen[code] = value
+    backward = chosen.get('planning_direction') == 'backward'
+    if 'sequence_objective' in chosen and not backward:
+        _error('objective', 'sequence_objective richiede planning_direction = backward')
+    return backward, chosen.get('sequence_objective')
+
+
 def _check_business_constraints(tables):
+    stage_policy(tables)
     for code in UNSUPPORTED:
         if tables.get(code):
             _error(code, 'vincolo raccolto ma non ancora supportato: il piano non può ignorarlo')
@@ -475,6 +505,8 @@ class WorkbookInput:
             if (self.stage_contract is not None and not self.materials_ignored) or any(i.code != 'material_shortage' for i in self.built.issues if i.severity in ('error','block')):
                 raise ValidationError(['input workbook non pronto al calcolo', *blocking])
         if self.stage_contract is None:
+            if stage_policy(self.tables)[0]:
+                raise ValidationError(['objective: planning_direction backward richiede il percorso setup/run'])
             result = plan(self.source)
             errors = verify_plan(self.source, result)
             if errors:
@@ -506,11 +538,14 @@ class WorkbookInput:
         else:
             far=datetime.max.replace(tzinfo=UTC)
             priority=tuple(sorted(task_data,key=lambda t:(task_data[t].due is None,task_data[t].due or far,t)))
+        backward, objective = stage_policy(self.tables)
         result = plan_materials_and_setup_stages(
             source, self.stage_contract, self.machine_sequence, supplies, needs,
-            priority, supply_quantities_net_of_external_commitments=True)
+            priority, supply_quantities_net_of_external_commitments=True,
+            backward=backward, sequence_objective=objective)
+        sequence = result.machine_sequence or self.machine_sequence
         projected,planned,bookings,mapping=_project_stages(result.material_scenario,result.staged,
-                                                         self.stage_contract,self.machine_sequence)
+                                                         self.stage_contract,sequence)
         return projected, planned, {
             'path': 'setup-run', 'audited': True, 'workbook_sha256': self.fingerprint,
             'stage_bookings': [primitive(b) for b in bookings],
@@ -518,6 +553,8 @@ class WorkbookInput:
             'material_pegs': [dict(task_id=p.task_id, item_id=p.item_id, supply_id=p.supply_id,
                                    quantity=str(p.quantity)) for p in result.allocation.pegs],
             'erp_publishable': False,
+            'planning_direction': 'backward' if backward else 'forward',
+            'machine_sequence': list(sequence),
         }
 
 
