@@ -41,6 +41,17 @@ guasto silenzioso che la renderebbe inutile e il piano solo piu' lento non passa
 quando un'alternativa non ci sta, e che non superi mai il limite superiore della ricerca (un successore con inizio
 fisso).
 
+## Non rilasciato — test di mutazione dell'audit indipendente
+
+L'audit (`audit_stage_capacity`) e' la rete di sicurezza di ogni piano a stadi: con i test indiretti di prima solo
+42 mutanti su 59 del suo codice venivano individuati. Il nuovo `tests/test_audit_stage_capacity_guards.py` altera un
+piano valido in modi precisi e controlla l'errore esatto: durata totale sbagliata o segmenti assenti, segmenti fuori
+orizzonte o di durata zero, segmenti sovrapposti (adiacenti validi), allocazioni duplicate/sconosciute/a 0%/oltre il
+100%/non intere (1 e 10.000 punti base validi), lavorazione senza la sua macchina, fase o stadio sconosciuti nelle
+prenotazioni e nei record congelati, sequenza non coerente, attrezzaggio sovrapposto alla lavorazione precedente
+(back to back valido), predecessore senza segmenti (errore, mai un'eccezione). Ora 57 su 59, i due rimasti sono
+docstring. Solo test.
+
 ## Non rilasciato — test di mutazione dello scheduler a stadi
 
 Stessa misura su `schedule_setup_stages`: da 17 a 32 mutanti su 44 individuati. Coperte le lacune mie (il default
