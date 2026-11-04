@@ -89,4 +89,7 @@ sotto quello imposto dai materiali (controllo esplicito, altrimenti errore).
 `sequence_objective` (`delivery`, `setup`, `gap`, richiede `backward=True`)
 cerca la sequenza valutando ogni candidato sul proprio piano backward; la
 sequenza usata e il risultato con i gap sono in `MaterialStagedPlan`.
-Le prenotazioni congelate (`frozen_bookings`) non sono supportate in backward.
+Le prenotazioni congelate (`frozen_bookings`) sono supportate: restano
+identiche, non vengono mai ritardate e limitano lo spazio dei vicini; l'audit le
+ricontrolla esattamente. `just_in_time_tail`, `backward_setup_before_run` e
+`optimize_backward_sequence` accettano lo stesso parametro.

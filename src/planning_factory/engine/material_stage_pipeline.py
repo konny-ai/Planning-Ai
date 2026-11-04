@@ -118,21 +118,21 @@ def _plan_backward(source, adjusted, allocation, contract, machine_sequence,
     """ADR 005 option A after the material gates: runs late, setups just before.
 
     Only ever delays work relative to the material-adjusted scenario, so material
-    availability keeps holding. Frozen bookings are not supported here.
+    availability keeps holding. Frozen stage bookings are never moved: they
+    bound how far their neighbours can be delayed.
     """
     from .setup_sequence_search import (
         backward_setup_before_run, optimize_backward_sequence,
     )
-    if frozen_bookings:
-        raise ValidationError(['backward planning does not support frozen stage bookings yet'])
     if objective is not None:
         search = optimize_backward_sequence(
             adjusted, contract, machine_sequence, objective=objective,
-            max_alternatives=max_alternatives)
+            max_alternatives=max_alternatives, frozen_bookings=frozen_bookings)
         result, sequence = search.result, search.sequence
     else:
         result = backward_setup_before_run(adjusted, contract, machine_sequence,
-                                           max_alternatives=max_alternatives)
+                                           max_alternatives=max_alternatives,
+                                           frozen_bookings=frozen_bookings)
         sequence = machine_sequence
     before, _, _ = compile_tasks(adjusted)
     after, _, _ = compile_tasks(result.scenario)
@@ -140,7 +140,8 @@ def _plan_backward(source, adjusted, allocation, contract, machine_sequence,
         raise ValidationError(['backward planning must never move a release earlier than the material gate'])
     plan_errors = verify_plan(result.solution.scenario, result.solution.plan)
     stage_errors = audit_stage_capacity(contract, result.scenario, sequence,
-                                        result.solution.bookings)
+                                        result.solution.bookings,
+                                        frozen_bookings=frozen_bookings)
     if plan_errors or stage_errors:
         raise ValidationError(['end-to-end planning audit failed', *plan_errors, *stage_errors])
     return MaterialStagedPlan(source, result.scenario, allocation, result.solution,

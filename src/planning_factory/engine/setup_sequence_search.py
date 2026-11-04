@@ -292,7 +292,8 @@ class JustInTimeResult:
 
 def just_in_time_tail(s: Scenario, contract: SetupContract,
                       machine_sequence: tuple[str, ...], *,
-                      max_alternatives: int = 32) -> JustInTimeResult:
+                      max_alternatives: int = 32,
+                      frozen_bookings: tuple = ()) -> JustInTimeResult:
     """EXPERIMENTAL, opt-in, not an approved rule (see ADR 005, option B-like).
 
     Delays the production run of a task by the room it has before anything
@@ -307,7 +308,9 @@ def just_in_time_tail(s: Scenario, contract: SetupContract,
     """
     tasks, edges, _ = compile_tasks(s)
     base = schedule_setup_stages(s, contract, machine_sequence,
-                                 max_alternatives=max_alternatives)
+                                 max_alternatives=max_alternatives,
+                                 frozen_bookings=frozen_bookings)
+    frozen_runs = {b.phase_id for b in frozen_bookings if b.stage == 'run'}
     baseline = sequence_metrics(s, base)
     phases = {p.id: p for p in contract.phases}
     active = [pid for pid in machine_sequence if tasks[pid].completed_at is None]
@@ -343,6 +346,8 @@ def just_in_time_tail(s: Scenario, contract: SetupContract,
 
     for pid in reversed(active):
         task = tasks[pid]
+        if pid in frozen_runs:
+            continue  # a frozen run is never moved
         run, limit = room(pid)
         if limit is None or limit.total_seconds() <= 0:
             continue
@@ -359,7 +364,8 @@ def just_in_time_tail(s: Scenario, contract: SetupContract,
                 for o in current_s.operations))
             try:
                 candidate = schedule_setup_stages(candidate_s, contract, machine_sequence,
-                                                  max_alternatives=max_alternatives)
+                                                  max_alternatives=max_alternatives,
+                                                  frozen_bookings=frozen_bookings)
             except ValidationError:
                 shift = shift / 2
                 continue
@@ -397,7 +403,8 @@ class BackwardSetupResult:
 
 def backward_setup_before_run(s: Scenario, contract: SetupContract,
                               machine_sequence: tuple[str, ...], *,
-                              max_alternatives: int = 32) -> BackwardSetupResult:
+                              max_alternatives: int = 32,
+                              frozen_bookings: tuple = ()) -> BackwardSetupResult:
     """ADR 005, option A (chosen by the client): runs as late as possible and
     every needed setup immediately before its run, with the machine sequence
     fixed beforehand.
@@ -410,7 +417,9 @@ def backward_setup_before_run(s: Scenario, contract: SetupContract,
     Input scenario and sequence are never modified.
     """
     first = just_in_time_tail(s, contract, machine_sequence,
-                              max_alternatives=max_alternatives)
+                              max_alternatives=max_alternatives,
+                              frozen_bookings=frozen_bookings)
+    frozen_setups = {b.phase_id for b in frozen_bookings if b.stage == 'setup'}
     current_s, current, metrics = first.scenario, first.solution, first.selected
     releases = {}
     for pid in reversed(machine_sequence):
@@ -418,7 +427,7 @@ def backward_setup_before_run(s: Scenario, contract: SetupContract,
                       if b.phase_id == pid and b.stage == 'setup'), None)
         run = next((b for b in current.bookings
                     if b.phase_id == pid and b.stage == 'run'), None)
-        if setup is None or run is None:
+        if setup is None or run is None or pid in frozen_setups:
             continue
         gap = run.segments[0].start - setup.segments[-1].end
         if gap.total_seconds() <= 0:
@@ -432,7 +441,8 @@ def backward_setup_before_run(s: Scenario, contract: SetupContract,
             try:
                 candidate = schedule_setup_stages(
                     current_s, contract, machine_sequence,
-                    max_alternatives=max_alternatives, setup_releases=trial)
+                    max_alternatives=max_alternatives, setup_releases=trial,
+                    frozen_bookings=frozen_bookings)
             except ValidationError:
                 return None
             rest = lambda r: sorted((x for x in r.bookings
@@ -500,7 +510,8 @@ def optimize_backward_sequence(s: Scenario, contract: SetupContract,
                                initial_sequence: tuple[str, ...] | None = None, *,
                                objective: str, max_evaluations: int = 12,
                                max_alternatives: int = 32,
-                               neighbourhood: str = 'swap') -> BackwardSequenceSearch:
+                               neighbourhood: str = 'swap',
+                               frozen_bookings: tuple = ()) -> BackwardSequenceSearch:
     """Bounded best-improvement search that scores each candidate order on its
     own ADR 005 option-A plan (runs late, setups right before them).
 
@@ -526,7 +537,8 @@ def optimize_backward_sequence(s: Scenario, contract: SetupContract,
 
     def evaluate(sequence):
         result = backward_setup_before_run(s, contract, sequence,
-                                           max_alternatives=max_alternatives)
+                                           max_alternatives=max_alternatives,
+                                           frozen_bookings=frozen_bookings)
         return result, sum(g for _, g in result.setup_gaps)
 
     best_result, best_gap = evaluate(initial_sequence)

@@ -7,8 +7,9 @@ accettano `backward=True` e `sequence_objective='delivery'|'setup'|'gap'`: dopo
 allocazione e audit dei materiali applicano l'opzione A (lavorazioni al più
 tardi, setup subito prima), con ricerca di sequenza opzionale sul piano
 backward. Si ritarda soltanto, quindi la disponibilita' dei materiali resta
-garantita (verificato esplicitamente); le prenotazioni congelate non sono ancora
-supportate in backward e vengono rifiutate. `MaterialStagedPlan` espone la
+garantita (verificato esplicitamente); le prenotazioni congelate sono supportate:
+restano identiche (setup e lavorazione), non vengono mai ritardate e limitano lo
+spazio di ritardo dei vicini (successori, lavoro seguente sulla macchina). `MaterialStagedPlan` espone la
 sequenza usata (`machine_sequence`) e il risultato backward con i gap.
 
 ## Non rilasciato — ricerca di sequenza sul piano backward

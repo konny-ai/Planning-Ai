@@ -177,12 +177,28 @@ class MaterialBackwardPipelineTests(unittest.TestCase):
             self.contract, result.material_scenario, result.machine_sequence,
             result.staged.bookings), ())
 
-    def test_backward_rejects_frozen_bookings_and_lone_objective(self):
-        frozen = StageBooking(
-            'job:a', 'run', (Interval(dt(hour=8, minute=30), dt(hour=9, minute=30)),),
-            (StageAllocation('m', 10000), StageAllocation('op', 2500)))
-        with self.assertRaisesRegex(ValidationError, 'frozen'):
-            self.run_pipeline(backward=True, frozen_bookings=(frozen,))
+    def test_backward_keeps_frozen_stages_exactly_and_delays_the_rest(self):
+        frozen = (
+            StageBooking('job:a', 'setup',
+                         (Interval(dt(hour=8), dt(hour=8, minute=30)),),
+                         (StageAllocation('m', 10000), StageAllocation('op', 5000),
+                          StageAllocation('tool', 10000))),
+            StageBooking('job:a', 'run',
+                         (Interval(dt(hour=8, minute=30), dt(hour=9, minute=30)),),
+                         (StageAllocation('m', 10000), StageAllocation('op', 2500))),
+        )
+        self.needs, self.supplies = (), ()
+        result = self.run_pipeline(backward=True, frozen_bookings=frozen)
+        got = {(b.phase_id, b.stage): b for b in result.staged.bookings}
+        for record in frozen:
+            self.assertEqual(got[(record.phase_id, record.stage)], record)
+        self.assertGreater(got[('job:b', 'run')].segments[0].start,
+                           dt(hour=10))  # b was delayed by its slack, a was not
+        self.assertEqual(audit_stage_capacity(
+            self.contract, result.material_scenario, result.machine_sequence,
+            result.staged.bookings, frozen_bookings=frozen), ())
+
+    def test_backward_rejects_lone_objective(self):
         with self.assertRaisesRegex(ValidationError, 'requires backward'):
             self.run_pipeline(sequence_objective='setup')
 
