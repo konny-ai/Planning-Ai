@@ -68,6 +68,6 @@ attrezzaggio subito prima di essa, sequenza macchina fissata in anticipo.
    la lavorazione precedente sulla macchina impediscono di avvicinarlo.
 
 Non cambia la durata ne' il numero degli attrezzaggi, non sposta mai nulla
-prima del piano in avanti e non accede a Factory. Limite: la sequenza e' un
-dato (non viene ottimizzata in questo passo); i rilasci derivati dei setup sono
+prima del piano in avanti e non accede a Factory. La sequenza e' un dato fissato prima del backward: si puo' ottimizzarla
+con `--objective` (la ricerca precede il backward) o fornirla con `--sequence`; i rilasci derivati dei setup sono
 riportati nel report, non nello scenario esportato.

@@ -120,6 +120,23 @@ class SetupStagesCliTests(unittest.TestCase):
             self.assertIn('job:a', report['backward']['setup_gaps_seconds'])
             self.assertEqual(report['kpis']['late_orders'], 0)
 
+    def test_backward_combines_with_sequence_search(self):
+        from .helpers import dt
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ops = [op(n, due=dt(day=23, hour=17)) for n in 'abc']
+            src, con = self._files(root, ops)
+            out, adjusted = root / 'stages.json', root / 'adjusted.json'
+            code, _ = run('setup-stages', str(src), str(con), '-o', str(out),
+                          '--sequence', 'job:a,job:b,job:c', '--objective', 'setup', '--budget', '12',
+                          '--neighbourhood', 'insertion', '--backward', '--scenario-output', str(adjusted))
+            self.assertEqual(code, 0)
+            report = json.loads(out.read_text(encoding='utf-8'))
+            self.assertEqual(report['audit_violations'], [])
+            self.assertEqual(report['search']['baseline']['setup_seconds'], 5400)
+            self.assertEqual(report['kpis']['setup_seconds'], 1800)  # searched order, then backward
+            self.assertEqual(report['backward']['baseline']['setup_seconds'], 1800)
+
     def test_backward_and_just_in_time_are_mutually_exclusive(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
