@@ -1,5 +1,17 @@
 # Changelog
 
+## Non rilasciato — SPERIMENTALE: lavorazioni terminali just-in-time
+
+`just_in_time_tail` / `setup-stages --just-in-time-tail --scenario-output ...`
+ritarda la lavorazione di ciascun task **terminale** (ultimo sulla macchina e
+senza successori) della sua slack di consegna, lasciando l'attrezzaggio
+anticipato (simile all'opzione B di [ADR 005](docs/decisions/005-backward-setup-proposta.md),
+che resta **una proposta non approvata**). Il ritardo diventa un rilascio
+derivato nello scenario esportato; il piano e' ripianificato e auditato e un
+candidato e' tenuto solo se nessun'altra fase cambia e i KPI non peggiorano
+(altrimenti e' riportato come rifiutato). Non e' la modalita' backward
+completa, che resta rifiutata.
+
 ## Non rilasciato — comando `setup-stages`
 
 `planning-factory setup-stages scenario.json contratto.json -o stadi.json`

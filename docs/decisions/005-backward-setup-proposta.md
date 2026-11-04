@@ -41,3 +41,11 @@ nessuna nuova semantica. Contro: non soddisfa chi vuole piani just-in-time.
 
 Audit indipendente di ogni piano, nessuna matrice di transizioni inventata,
 nessun peso di business numerico non approvato, nessuna scrittura su Factory.
+
+## Prototipo sperimentale (non approvato)
+
+Per rendere concreta l'opzione B senza imporla, il repository contiene
+`just_in_time_tail` e `setup-stages --just-in-time-tail`: ritarda solo le
+lavorazioni terminali della loro slack, ripianifica e audita, e rifiuta ogni
+candidato che sposti altre fasi o peggiori i KPI. E' opt-in e puo' essere
+rimosso se il committente sceglie A o C. Non copre fasi con successori.

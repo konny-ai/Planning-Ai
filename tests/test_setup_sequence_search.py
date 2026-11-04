@@ -185,3 +185,34 @@ class StateGroupedStartTests(unittest.TestCase):
     def test_best_start_requires_explicit_objective(self):
         with self.assertRaises(ValueError):
             best_start_sequence(base([op('a'), op('b'), op('c')]), three(), objective='x')
+
+
+class JustInTimeTailTests(unittest.TestCase):
+    def _s(self, due_day):
+        return base([op('a', due=dt(day=due_day, hour=17)), op('b', due=dt(day=due_day, hour=17))])
+
+    def test_terminal_run_is_delayed_by_slack_and_audited(self):
+        from planning_factory.engine.setup_sequence_search import just_in_time_tail
+        s = self._s(23)
+        c = load_setup_contract(json.dumps(spec()))
+        seq = ('job:a', 'job:b')
+        result = just_in_time_tail(s, c, seq)
+        self.assertEqual([pid for pid, _ in result.delayed], ['job:b'])
+        before = {(b.phase_id, b.stage): b for b in schedule_setup_stages(s, c, seq).bookings}
+        after = {(b.phase_id, b.stage): b for b in result.solution.bookings}
+        self.assertEqual(before[('job:a', 'run')], after[('job:a', 'run')])
+        self.assertGreater(after[('job:b', 'run')].segments[0].start,
+                           before[('job:b', 'run')].segments[0].start)
+        self.assertEqual(result.selected.late_orders, 0)
+        self.assertEqual(audit_stage_capacity(c, result.scenario, seq,
+                                              result.solution.bookings), ())
+        # input scenario untouched
+        self.assertTrue(all(o.release is None for o in s.operations))
+
+    def test_no_slack_means_no_change(self):
+        from planning_factory.engine.setup_sequence_search import just_in_time_tail
+        s = base([op('a'), op('b')])  # no due dates
+        c = load_setup_contract(json.dumps(spec()))
+        result = just_in_time_tail(s, c, ('job:a', 'job:b'))
+        self.assertEqual(result.delayed, ())
+        self.assertEqual(result.scenario, s)

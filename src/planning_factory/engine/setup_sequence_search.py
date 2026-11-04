@@ -5,7 +5,7 @@ All candidates are independently audited by the two-stage planner; no
 production database, GUI, or legacy equivalence is involved.
 """
 import heapq
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC
 from planning_factory.domain.models import Scenario
 from planning_factory.domain.setup_contract import SetupContract
@@ -278,3 +278,83 @@ def optimize_setup_sequence(s: Scenario, contract: SetupContract,
             break
     return SequenceSearch(objective, winner, current, initial, best,
                           evaluated, rejected, current != initial_sequence)
+
+
+@dataclass(frozen=True)
+class JustInTimeResult:
+    solution: StagedSetupResult
+    scenario: Scenario          # source scenario with the derived releases
+    baseline: SequenceMetrics
+    selected: SequenceMetrics
+    delayed: tuple[tuple[str, int], ...]   # (phase id, seconds of delay)
+    rejected: tuple[str, ...]
+
+
+def just_in_time_tail(s: Scenario, contract: SetupContract,
+                      machine_sequence: tuple[str, ...], *,
+                      max_alternatives: int = 32) -> JustInTimeResult:
+    """EXPERIMENTAL, opt-in, not an approved rule (see ADR 005, option B-like).
+
+    Delays the production run of each *terminal* task (last on its machine and
+    without successors) by its delivery slack, keeping its setup as early as
+    the resources allow. A candidate is kept only if the whole staged plan is
+    re-planned and audited, every OTHER phase's bookings are unchanged and the
+    KPIs do not get worse; otherwise it is reported as rejected. The delay is
+    expressed as a derived release in the returned scenario, never applied to
+    the caller's input.
+    """
+    tasks, edges, _ = compile_tasks(s)
+    base = schedule_setup_stages(s, contract, machine_sequence,
+                                 max_alternatives=max_alternatives)
+    baseline = sequence_metrics(s, base)
+    has_successor = {e.predecessor for e in edges}
+    phases = {p.id: p for p in contract.phases}
+    last_on_machine = {}
+    for pid in machine_sequence:
+        if tasks[pid].completed_at is None:
+            last_on_machine[phases[pid].machine_id] = pid
+    current_s, current, metrics = s, base, baseline
+    delayed, rejected = [], []
+    for pid in sorted(last_on_machine.values()):
+        task = tasks[pid]
+        if pid in has_successor or task.due is None:
+            continue
+        run = next(b for b in current.bookings if b.phase_id == pid and b.stage == 'run')
+        slack = int((task.due - run.segments[-1].end).total_seconds())
+        if slack <= 0:
+            continue
+        members = set(task.operation_ids)
+        accepted = None
+        shift = task.due - run.segments[-1].end
+        # Wall-clock slack ignores calendars: when the full delay is infeasible
+        # (non-working days, horizon end) try progressively smaller delays.
+        for _ in range(6):
+            new_release = run.segments[0].start + shift
+            candidate_s = replace(current_s, operations=tuple(
+                replace(o, release=new_release) if o.id in members else o
+                for o in current_s.operations))
+            try:
+                candidate = schedule_setup_stages(candidate_s, contract, machine_sequence,
+                                                  max_alternatives=max_alternatives)
+            except ValidationError:
+                shift = shift / 2
+                continue
+            others_same = sorted((x for x in candidate.bookings if x.phase_id != pid),
+                                 key=lambda x: (x.phase_id, x.stage)) == \
+                sorted((x for x in current.bookings if x.phase_id != pid),
+                       key=lambda x: (x.phase_id, x.stage))
+            new_metrics = sequence_metrics(candidate_s, candidate)
+            no_worse = (new_metrics.late_orders <= metrics.late_orders and
+                        new_metrics.tardiness_seconds <= metrics.tardiness_seconds and
+                        new_metrics.setup_seconds <= metrics.setup_seconds)
+            if others_same and no_worse:
+                accepted = (candidate_s, candidate, new_metrics, int(shift.total_seconds()))
+                break
+            shift = shift / 2
+        if accepted:
+            current_s, current, metrics, applied = accepted
+            delayed.append((pid, applied))
+        else:
+            rejected.append(pid)
+    return JustInTimeResult(current, current_s, baseline, metrics,
+                            tuple(delayed), tuple(rejected))

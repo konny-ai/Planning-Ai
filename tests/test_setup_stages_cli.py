@@ -78,6 +78,28 @@ class SetupStagesCliTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(json.loads(out.read_text(encoding='utf-8'))['kpis']['setup_seconds'], 1800)
 
+    def test_just_in_time_tail_is_opt_in_and_writes_derived_scenario(self):
+        from planning_factory.adapters.json_io import loads
+        from .helpers import dt
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ops = [op('a', due=dt(day=23, hour=17)), op('b', due=dt(day=23, hour=17)),
+                   op('c', due=dt(day=23, hour=17))]
+            src, con = self._files(root, ops)
+            out, adjusted = root / 'stages.json', root / 'adjusted.json'
+            with redirect_stderr(StringIO()):
+                code, _ = run('setup-stages', str(src), str(con), '-o', str(out), '--just-in-time-tail')
+            self.assertNotEqual(code, 0)
+            code, _ = run('setup-stages', str(src), str(con), '-o', str(out),
+                          '--just-in-time-tail', '--scenario-output', str(adjusted))
+            self.assertEqual(code, 0)
+            report = json.loads(out.read_text(encoding='utf-8'))
+            self.assertTrue(report['just_in_time_tail']['experimental'])
+            self.assertEqual(report['audit_violations'], [])
+            self.assertTrue(report['just_in_time_tail']['delayed'])
+            self.assertTrue(any(o.release is not None for o in loads(adjusted.read_text(encoding='utf-8')).operations))
+            self.assertTrue(all(o.release is None for o in loads(src.read_text(encoding='utf-8')).operations))
+
     def test_refuses_to_overwrite_inputs(self):
         with TemporaryDirectory() as tmp:
             src, con = self._files(Path(tmp))

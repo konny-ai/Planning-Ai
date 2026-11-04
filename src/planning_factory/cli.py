@@ -79,6 +79,9 @@ def main(argv=None) -> int:
     stages.add_argument('--objective', choices=('delivery', 'setup', 'flow'),
                         help='Optional bounded sequence search for this explicit objective')
     stages.add_argument('--neighbourhood', choices=('swap', 'insertion'), default='swap')
+    stages.add_argument('--just-in-time-tail', action='store_true',
+                        help='EXPERIMENTAL (ADR 005, not approved): delay terminal runs by their delivery slack; needs --scenario-output')
+    stages.add_argument('--scenario-output', help='Scenario JSON with the derived releases of --just-in-time-tail')
     stages.add_argument('--budget', type=int, default=24, help='Sequence evaluations, 1..256')
     stages.add_argument('--max-alternatives', type=int, default=32)
     setups = sub.add_parser('audit-setups', help='Audit explicit sequence-changeover rules against a plan')
@@ -286,7 +289,18 @@ def main(argv=None) -> int:
             else:
                 solution = schedule_setup_stages(scenario, contract, sequence,
                                                  max_alternatives=args.max_alternatives)
-            violations = audit_stage_capacity(contract, scenario, sequence, solution.bookings)
+            audit_scenario, jit = scenario, None
+            if args.just_in_time_tail:
+                from .engine.setup_sequence_search import just_in_time_tail
+                if not args.scenario_output:
+                    raise ValidationError(['--just-in-time-tail requires --scenario-output'])
+                protected = {Path(args.scenario).resolve(), Path(args.contract).resolve(), Path(args.output).resolve()}
+                if Path(args.scenario_output).resolve() in protected:
+                    raise ValidationError(['--scenario-output must be a distinct new file'])
+                jit = just_in_time_tail(scenario, contract, sequence, max_alternatives=args.max_alternatives)
+                solution, audit_scenario = jit.solution, jit.scenario
+                Path(args.scenario_output).write_text(dumps(audit_scenario), encoding='utf-8')
+            violations = audit_stage_capacity(contract, audit_scenario, sequence, solution.bookings)
             report = {
                 'sequence': list(sequence),
                 'bookings': [{'phase_id': b.phase_id, 'stage': b.stage,
@@ -294,9 +308,13 @@ def main(argv=None) -> int:
                                            for i in b.segments],
                               'allocations': [{'resource_id': a.resource_id, 'occupancy_bps': a.occupancy_bps}
                                               for a in b.allocations]} for b in solution.bookings],
-                'kpis': sequence_metrics(scenario, solution).as_dict(),
+                'kpis': sequence_metrics(audit_scenario, solution).as_dict(),
                 'audit_violations': list(violations),
             }
+            if jit is not None:
+                report['just_in_time_tail'] = {
+                    'experimental': True, 'delayed': [{'phase_id': p, 'seconds': s} for p, s in jit.delayed],
+                    'rejected': list(jit.rejected), 'baseline': jit.baseline.as_dict()}
             if search is not None:
                 report['search'] = {'objective': search.objective, 'evaluated': search.evaluated,
                                     'rejected': search.rejected, 'improved': search.improved,
