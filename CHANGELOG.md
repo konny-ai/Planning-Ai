@@ -41,6 +41,15 @@ guasto silenzioso che la renderebbe inutile e il piano solo piu' lento non passa
 quando un'alternativa non ci sta, e che non superi mai il limite superiore della ricerca (un successore con inizio
 fisso).
 
+## Non rilasciato — test di mutazione dei comandi CLI `setup-stages` e `staged-plan`
+
+I due blocchi della CLI (circa 270 righe) avevano 24/35 e 6/9 mutanti individuati; ora 31/35 e 9/9. Coperte le
+lacune vere: le chiavi dei report JSON e dei riepiloghi stampati sono ordinate in ogni modalita' (cosi' si possono
+confrontare riga per riga e riprodurre); `--objective` senza `--restarts` e' una ricerca a partenza singola (con
+`--restarts` si prova anche l'ordine per stato); nella modalita' normale `staged-plan` rifa il proprio audit e,
+se segnala una violazione, esce con 2 e la riporta. I quattro mutanti rimasti in `setup-stages` sono testi di
+messaggi o un controllo ridondante con altri che rifiutano prima. Solo test.
+
 ## Non rilasciato — test di mutazione del parser della specifica v0.3 e della politica del workbook
 
 Il parser della specifica (un file esterno) aveva 14 mutanti su 28 individuati: ora 26 (restano due equivalenti, un

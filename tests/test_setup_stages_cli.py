@@ -359,6 +359,51 @@ class SetupStagesCliTests(unittest.TestCase):
             self.assertTrue(adj.exists())                       # the file the command asked for
             self.assertEqual(loads(adj.read_text(encoding='utf-8')).operations, ())
 
+    def test_reports_have_sorted_keys_so_they_can_be_diffed_and_reproduced(self):
+        # Mutation testing: nothing checked the key order of the JSON written for every command mode.
+        def sorted_everywhere(node):
+            if isinstance(node, dict):
+                return list(node) == sorted(node) and all(sorted_everywhere(v) for v in node.values())
+            if isinstance(node, list):
+                return all(sorted_everywhere(v) for v in node)
+            return True
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src, con = self._files(root)
+            adj, rep = root / 'adj.json', root / 'rep.json'
+            modes = {'plain': [], 'partial': ['--partial', '--no-candidate', 'c'],
+                     'backward': ['--sequence', 'job:a,job:b,job:c', '--backward', '--scenario-output', str(adj)]}
+            for name, extra in modes.items():
+                out = root / f'{name}.json'
+                code, summary = run('setup-stages', str(src), str(con), '-o', str(out), *extra)
+                self.assertEqual(code, 0)
+                with self.subTest(mode=name):
+                    self.assertTrue(sorted_everywhere(json.loads(out.read_text(encoding='utf-8'))))
+                    self.assertTrue(sorted_everywhere(json.loads(summary)))          # the printed summary too
+                    self.assertEqual(out.read_text(encoding='utf-8'),
+                                     json.dumps(json.loads(out.read_text(encoding='utf-8')), indent=2, sort_keys=True) + '\n')
+            code, summary = run('setup-stages', str(adj), str(con), '-o', str(rep), '--replay', str(root / 'backward.json'))
+            self.assertEqual(code, 0)
+            self.assertTrue(sorted_everywhere(json.loads(rep.read_text(encoding='utf-8'))))
+            self.assertTrue(sorted_everywhere(json.loads(summary)))
+
+    def test_objective_without_restarts_is_a_single_start_search(self):
+        # With restarts the search also starts from the state-grouped order; without them it must not.
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src, con = self._files(root)                          # a BLUE, b RED, c BLUE; the machine starts RED
+            single, multi = root / 'single.json', root / 'multi.json'
+            self.assertEqual(run('setup-stages', str(src), str(con), '-o', str(single),
+                                 '--objective', 'setup', '--budget', '1')[0], 0)
+            self.assertEqual(run('setup-stages', str(src), str(con), '-o', str(multi),
+                                 '--objective', 'setup', '--budget', '1', '--restarts', '1')[0], 0)
+            one, many = (json.loads(f.read_text(encoding='utf-8')) for f in (single, multi))
+            self.assertNotIn('multistart', one)
+            self.assertEqual(one['sequence'], ['job:a', 'job:b', 'job:c'])        # budget 1 keeps the due-date order
+            self.assertEqual(one['kpis']['setup_seconds'], 5400)
+            self.assertEqual(many['kpis']['setup_seconds'], 1800)                   # the grouped start is only tried with restarts
+            self.assertGreaterEqual(many['multistart']['starts'], 2)         # due-date + grouped (duplicates are dropped)
+
     def test_refuses_to_overwrite_inputs(self):
         with TemporaryDirectory() as tmp:
             src, con = self._files(Path(tmp))

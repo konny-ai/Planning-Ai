@@ -84,6 +84,37 @@ class StagedPlanCliTests(unittest.TestCase):
                 self.assertNotEqual(run('staged-plan', str(src), str(sp), '-o', str(src))[0], 0)
             self.assertIn('must not overwrite', err.getvalue())
 
+    def test_the_cli_reruns_its_own_audit_in_normal_mode_and_reports_violations_with_exit_2(self):
+        # Mutation testing: nothing proved the CLI's own audit (after the pipeline's) actually runs.
+        from unittest import mock
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src, sp = self.files(root)
+            out = root / 'plan.json'
+            with mock.patch('planning_factory.engine.setup_capacity.audit_stage_capacity',
+                            return_value=('injected violation',)):
+                code, text = run('staged-plan', str(src), str(sp), '-o', str(out))
+            self.assertEqual(code, 2)
+            self.assertEqual(json.loads(out.read_text(encoding='utf-8'))['audit_violations'], ['injected violation'])
+            self.assertEqual(json.loads(text)['audit_violations'], ['injected violation'])
+            self.assertEqual(run('staged-plan', str(src), str(sp), '-o', str(out))[0], 0)    # untouched: clean
+
+    def test_report_and_summary_keys_are_sorted(self):
+        def sorted_everywhere(node):
+            if isinstance(node, dict):
+                return list(node) == sorted(node) and all(sorted_everywhere(v) for v in node.values())
+            if isinstance(node, list):
+                return all(sorted_everywhere(v) for v in node)
+            return True
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src, sp = self.files(root)
+            out = root / 'plan.json'
+            code, text = run('staged-plan', str(src), str(sp), '-o', str(out))
+            self.assertEqual(code, 0)
+            self.assertTrue(sorted_everywhere(json.loads(out.read_text(encoding='utf-8'))))
+            self.assertTrue(sorted_everywhere(json.loads(text)))
+
     def test_hostile_spec_values_give_a_clean_error_and_no_report(self):
         for changes in ({'quantity': '1e999999999'}, {'available_at': '9999-12-31T23:59:59Z'}):
             with TemporaryDirectory() as tmp, self.subTest(changes=changes):
