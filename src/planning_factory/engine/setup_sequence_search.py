@@ -171,6 +171,29 @@ def state_grouped_sequence(s: Scenario, contract: SetupContract,
     return tuple(next(cursor[phases[tid].machine_id]) for tid in base)
 
 
+def best_start_sequence(s: Scenario, contract: SetupContract, *, objective: str,
+                        max_alternatives: int = 32) -> tuple[str, ...]:
+    """Pick the better feasible start between due-date and state-grouped order.
+
+    Ties keep the due-date order. The due-date order must be feasible (as in
+    optimize_setup_sequence); an infeasible grouped order is simply skipped.
+    """
+    edd = default_machine_sequence(s)
+    best = edd
+    best_score = _score(sequence_metrics(s, schedule_setup_stages(
+        s, contract, edd, max_alternatives=max_alternatives)), objective)
+    grouped = state_grouped_sequence(s, contract, edd)
+    if grouped != edd:
+        try:
+            score = _score(sequence_metrics(s, schedule_setup_stages(
+                s, contract, grouped, max_alternatives=max_alternatives)), objective)
+        except ValidationError:
+            return best
+        if score < best_score:
+            best = grouped
+    return best
+
+
 def _neighbours(sequence, machine_by_task, neighbourhood='swap'):
     """Moves on each machine, including noncontiguous global positions.
 

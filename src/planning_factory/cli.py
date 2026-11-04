@@ -74,8 +74,8 @@ def main(argv=None) -> int:
     stages.add_argument('contract', help='Canonical setup contract v1 JSON')
     stages.add_argument('-o', '--output', required=True, help='Stage plan JSON: sequence, bookings, KPIs, audit')
     stages.add_argument('--sequence', help='Comma-separated phase order; default: earliest due date, precedence-safe')
-    stages.add_argument('--start', choices=('edd', 'state-grouped'), default='edd',
-                        help='Default start order when --sequence is absent; state-grouped falls back to edd if infeasible')
+    stages.add_argument('--start', choices=('edd', 'state-grouped', 'best'), default='edd',
+                        help='Default start order when --sequence is absent; state-grouped falls back to edd if infeasible; best needs --objective and keeps the better of the two')
     stages.add_argument('--objective', choices=('delivery', 'setup', 'flow'),
                         help='Optional bounded sequence search for this explicit objective')
     stages.add_argument('--neighbourhood', choices=('swap', 'insertion'), default='swap')
@@ -262,6 +262,12 @@ def main(argv=None) -> int:
             contract = load_setup_contract(Path(args.contract).read_text(encoding='utf-8'))
             sequence = (tuple(x for x in args.sequence.split(',') if x)
                         if args.sequence else default_machine_sequence(scenario))
+            if args.start == 'best' and not args.sequence:
+                if not args.objective:
+                    raise ValidationError(['--start best requires --objective'])
+                from .engine.setup_sequence_search import best_start_sequence
+                sequence = best_start_sequence(scenario, contract, objective=args.objective,
+                                               max_alternatives=args.max_alternatives)
             if args.start == 'state-grouped' and not args.sequence:
                 from .engine.setup_sequence_search import state_grouped_sequence
                 try:

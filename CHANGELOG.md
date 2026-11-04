@@ -11,7 +11,9 @@ Non scrive mai sugli ingressi e non tocca Factory. `--start state-grouped`
 (opzionale, default `edd`) parte da un ordine che raggruppa per macchina le
 fasi con lo stesso stato obiettivo, partendo dallo stato attuale della
 macchina (`state_grouped_sequence`); se viola le precedenze si ricade sull'ordine
-per scadenza.
+per scadenza. `--start best` (richiede `--objective`) confronta i due ordini
+(`best_start_sequence`) e parte dal migliore sull'obiettivo scelto; a parità
+resta l'ordine per scadenza.
 
 ## Non rilasciato — sequenza macchina automatica per lo scheduler setup/run
 

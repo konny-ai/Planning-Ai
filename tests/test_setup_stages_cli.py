@@ -65,6 +65,19 @@ class SetupStagesCliTests(unittest.TestCase):
             self.assertEqual(report['kpis']['setup_seconds'], 1800)
             self.assertEqual(report['audit_violations'], [])
 
+    def test_best_start_needs_objective_and_picks_lower_setup(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src, con = self._files(root)
+            out = root / 'stages.json'
+            with redirect_stderr(StringIO()):
+                code, _ = run('setup-stages', str(src), str(con), '-o', str(out), '--start', 'best')
+            self.assertNotEqual(code, 0)
+            code, _ = run('setup-stages', str(src), str(con), '-o', str(out),
+                          '--start', 'best', '--objective', 'setup', '--budget', '1')
+            self.assertEqual(code, 0)
+            self.assertEqual(json.loads(out.read_text(encoding='utf-8'))['kpis']['setup_seconds'], 1800)
+
     def test_refuses_to_overwrite_inputs(self):
         with TemporaryDirectory() as tmp:
             src, con = self._files(Path(tmp))

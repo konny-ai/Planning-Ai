@@ -7,7 +7,7 @@ from planning_factory.domain.setup_contract import load_setup_contract
 from planning_factory.engine.setup_stage_scheduler import schedule_setup_stages
 from planning_factory.engine.setup_sequence_search import (
     default_machine_sequence, optimize_setup_sequence, sequence_metrics,
-    state_grouped_sequence,
+    best_start_sequence, state_grouped_sequence,
 )
 from planning_factory.engine.setup_capacity import audit_stage_capacity
 from planning_factory.engine.verification import verify_plan
@@ -176,3 +176,12 @@ class StateGroupedStartTests(unittest.TestCase):
         seq = state_grouped_sequence(s, c)
         self.assertEqual(sorted(seq), ['job:a', 'job:b', 'job:c'])
         self.assertEqual(seq, state_grouped_sequence(s, c))
+
+    def test_best_start_prefers_grouped_when_it_scores_better(self):
+        s = base([op('a'), op('b'), op('c')])
+        self.assertEqual(best_start_sequence(s, three(), objective='setup'),
+                         ('job:b', 'job:a', 'job:c'))
+
+    def test_best_start_requires_explicit_objective(self):
+        with self.assertRaises(ValueError):
+            best_start_sequence(base([op('a'), op('b'), op('c')]), three(), objective='x')
