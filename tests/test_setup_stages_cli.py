@@ -5,6 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import json
 import unittest
+from datetime import timedelta
 
 from planning_factory.adapters.json_io import dumps
 from planning_factory.cli import main
@@ -410,6 +411,37 @@ class StageHtmlReportTests(unittest.TestCase):
                                '--no-candidate', 'x', '--html', str(src))
             self.assertNotEqual(code, 0)
             self.assertIn('--html must not overwrite', err.getvalue())
+
+    def test_bar_geometry_is_proportional_to_the_time_span(self):
+        # Mutation testing: nothing checked where the bars are drawn, so a wrong span or min/max went unnoticed.
+        import re
+        from planning_factory.adapters.stage_report import stage_html_report
+        from planning_factory.domain.models import Interval
+        from planning_factory.engine.setup_capacity import StageAllocation, StageBooking
+        from .helpers import dt
+        first = StageBooking('job:a', 'setup', (Interval(dt(hour=8), dt(hour=9)),), (StageAllocation('m', 10000),))
+        second = StageBooking('job:a', 'run', (Interval(dt(hour=9), dt(hour=11)),), (StageAllocation('m', 10000),))
+        tick = StageBooking('job:b', 'run', (Interval(dt(hour=11), dt(hour=11) + timedelta(seconds=1)),),
+                            (StageAllocation('n', 10000),))
+        page = stage_html_report((first, second, tick))
+        bars = re.findall(r'class="bar (\w+)" style="left:([\d.]+)%;width:([\d.]+)%"', page)
+        span = 3 * 3600 + 1                                               # 08:00 to 11:00:01
+        pct = lambda seconds: f'{seconds / span * 100:.3f}'
+        self.assertEqual(bars[0], ('setup', '0.000', pct(3600)))          # 1h at the very start
+        self.assertEqual(bars[1], ('run', pct(3600), pct(7200)))          # starts after the first, lasts 2h
+        self.assertEqual(bars[2], ('run', pct(3 * 3600), '0.200'))        # a one-second bar keeps a visible width
+        self.assertLess(float(bars[0][1]) + float(bars[0][2]), float(bars[1][1]) + 0.001)   # bars do not overlap
+        single = stage_html_report((first,))                              # one booking alone spans the whole track
+        self.assertIn('left:0.000%;width:100.000%', single)
+
+    def test_a_zero_length_booking_renders_a_minimal_bar_instead_of_dividing_by_zero(self):
+        from planning_factory.adapters.stage_report import stage_html_report
+        from planning_factory.domain.models import Interval
+        from planning_factory.engine.setup_capacity import StageAllocation, StageBooking
+        from .helpers import dt
+        point = StageBooking('job:a', 'run', (Interval(dt(hour=8), dt(hour=8)),), (StageAllocation('m', 10000),))
+        page = stage_html_report((point,))
+        self.assertIn('left:0.000%;width:0.200%', page)
 
     def test_html_escapes_untrusted_ids(self):
         from planning_factory.adapters.stage_report import stage_html_report

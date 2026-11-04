@@ -41,6 +41,16 @@ guasto silenzioso che la renderebbe inutile e il piano solo piu' lento non passa
 quando un'alternativa non ci sta, e che non superi mai il limite superiore della ricerca (un successore con inizio
 fisso).
 
+## Non rilasciato — test di mutazione della pipeline materiali e del report HTML
+
+Pipeline materiali: l'audit finale della pipeline (`piano` + `capacita'`) era provato solo quando falliscono
+entrambi o nessuno; ora un test fa fallire una sola delle due verifiche, in avanti e in backward, e controlla
+che il piano venga fermato con il loro messaggio. Report HTML: nessun test verificava dove sono disegnate le barre.
+Ora la posizione e la larghezza sono controllate in proporzione al tempo (barra da un secondo con larghezza
+minima visibile, prenotazione di durata zero senza divisione per zero, prenotazione singola a tutta larghezza).
+Tutti i mutanti sul codice delle due parti sono ora individuati (11/11 il report, 8/10 la pipeline con i due
+restanti in docstring). Solo test.
+
 ## Non rilasciato — test di mutazione dell'audit indipendente
 
 L'audit (`audit_stage_capacity`) e' la rete di sicurezza di ogni piano a stadi: con i test indiretti di prima solo

@@ -202,6 +202,20 @@ class MaterialBackwardPipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, 'requires backward'):
             self.run_pipeline(sequence_objective='setup')
 
+    def test_the_pipelines_own_final_audit_stops_a_plan_in_both_directions(self):
+        # Mutation testing: nothing proved the end-to-end audit fires when only ONE of the two checks fails.
+        from unittest import mock
+        from planning_factory.engine import material_stage_pipeline as module
+        for backward in (False, True):
+            for target, message in (('audit_stage_capacity', 'stage-audit-finding'),
+                                    ('verify_plan', 'plan-verifier-finding')):
+                with self.subTest(backward=backward, failing=target), \
+                        mock.patch.object(module, target, return_value=(message,)):
+                    with self.assertRaisesRegex(ValidationError, 'end-to-end planning audit failed') as caught:
+                        self.run_pipeline(backward=backward)
+                    self.assertIn(message, str(caught.exception))
+        self.run_pipeline(backward=True)                                    # and without interference it passes
+
     def test_material_shortage_still_blocks_backward(self):
         self.supplies = (MaterialSupply('sheet', 'SHEET', Decimal('1'), dt(20, 9)),)
         with self.assertRaisesRegex(ValidationError, 'shortages'):
