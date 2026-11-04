@@ -35,7 +35,11 @@ attraverso un nesting; sequenza o contratto incompleti vanno rifiutati; a parita
 l'ordine per scadenza; il ritardo delle lavorazioni non va in crash con un successore fornitore, misura le
 precedenze inizio->inizio dall'inizio, non riporta spostamenti di 0 secondi e non tenta le lavorazioni
 congelate. I mutanti rimasti sono testo di docstring, equivalenti (`<` -> `<=` che assegna lo stesso valore) o
-pura ottimizzazione (i limiti che non cambiano il risultato). Il codice del repo non e' cambiato.
+pura ottimizzazione (i limiti che non cambiano il risultato). Il codice del repo non e' cambiato. La finestra di
+ricerca ha ora tre guardie: che venga davvero usata (una spia su `bundle_free` ne misura la portata, cosi' un
+guasto silenzioso che la renderebbe inutile e il piano solo piu' lento non passa), che decida l'orizzonte intero
+quando un'alternativa non ci sta, e che non superi mai il limite superiore della ricerca (un successore con inizio
+fisso).
 
 ## Non rilasciato — fuzzing dello scenario JSON
 

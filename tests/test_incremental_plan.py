@@ -215,6 +215,48 @@ class SearchWindowTests(unittest.TestCase):
         self.assertGreater(beyond, 20, 'some tasks must land beyond the window (fallback path)')
         self.assertGreater(multi, 100, 'tasks with several alternatives must be exercised')
 
+    def test_the_window_never_reaches_past_the_upper_bound_of_the_search(self):
+        # Mutation testing: with the window guard broken the first pass looked past a fixed successor and
+        # placed the predecessor after it. The upper bound (here B's fixed start) must always hold.
+        from planning_factory.domain.validation import ValidationError
+        ops = [Operation('block', 'o0', 40 * 3600, (alt('m'),), fixed_start=dt(day=19, hour=8), splittable=True),
+               Operation('A', 'o1', 3600, (alt('m'),)),
+               Operation('B', 'o2', 3600, (alt('n'),), predecessors=(Dependency('A', 'FS'),),
+                         fixed_start=dt(day=20, hour=9))]
+        s = scenario(ops, resources=(Resource('m', 'work'), Resource('n', 'work')),
+                     end=dt(month=12, day=30, hour=0))
+        with self.assertRaisesRegex(ValidationError, 'unscheduled predecessor'):
+            plan(s)
+
+    def test_the_window_is_used_and_the_horizon_decides_when_an_alternative_does_not_fit(self):
+        # Mutation testing: breaking the window logic left every plan correct but slow, so nothing failed.
+        # A spy on bundle_free records how far each search looked.
+        horizon = dt(month=12, day=30, hour=0)
+        def reach(s, **patches):
+            calls = []
+            real = scheduler.bundle_free
+            def spy(alternative, resources, calendars, reservations, lower, upper, cache=None):
+                if reservations:                       # searches against real bookings, not estimates
+                    calls.append((upper - lower).days)
+                return real(alternative, resources, calendars, reservations, lower, upper, cache)
+            with mock.patch.object(scheduler, 'bundle_free', spy):
+                plan(s)
+            return calls
+        simple = scenario([Operation(f'p{i}', f'o{i}', 3600, (alt('m'),)) for i in range(5)], end=horizon)
+        windowed = reach(simple)
+        self.assertTrue(windowed and min(windowed) > 0 and max(windowed) <= 14, windowed)   # every search stays inside
+        with mock.patch.object(scheduler, 'SEARCH_WINDOW', None):
+            self.assertTrue(min(reach(simple)) > 14)                          # without it they span the horizon
+        # one alternative (B, sparse calendar) cannot fit inside the window: the horizon must decide
+        work = scenario([]).calendars[0]
+        sparse = Calendar('sparse', 'UTC', (Shift(0, time(8), time(9)),))
+        undecided = scenario([Operation('block', 'o0', 72 * 3600, (alt('A'),), fixed_start=dt(day=19, hour=8),
+                                        splittable=True),
+                              Operation('T', 'o1', 4 * 3600, (alt('A'), alt('B')), splittable=True)],
+                             calendars=(work, sparse), end=horizon,
+                             resources=(Resource('A', 'work'), Resource('B', 'sparse')))
+        self.assertGreater(max(reach(undecided)), 14)
+
     def test_task_with_an_alternative_that_only_fits_later_keeps_the_full_search_choice(self):
         # B fits only beyond the window but starts earlier than A (earliest start wins): the
         # window must not turn this into A. Found by code review; reproduced before the fix.
