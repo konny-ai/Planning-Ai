@@ -18,7 +18,7 @@ from planning_factory.domain.validation import ValidationError, compile_tasks
 from .scheduler import plan
 from .verification import verify_plan
 from .setup_capacity import (
-    StageAllocation, StageBooking, audit_stage_capacity,
+    StageAllocation, StageBooking, audit_stage_capacity, external_release_floors,
 )
 
 
@@ -72,6 +72,8 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
     and start before material arrives; run starts after release/dependencies.
     Setup never overlaps the preceding run on the same machine. Fully intact
     one-segment frozen stages can be pinned; partial WIP still fails closed.
+    Supplier milestones (external_end) take no phase or booking; an FS
+    successor cannot start its run before the stated end plus lag.
     Already completed phases are history: they hold no booking, satisfy
     their successors' precedences and advance the observed machine state.
     """
@@ -81,11 +83,14 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
     if any(o.setup_seconds for o in s.operations) or any(n.setup_seconds for n in s.nestings):
         raise ValidationError(['run-only input required; v0.2 setup_seconds would double-count'])
     phases = {p.id: p for p in contract.phases}
-    if set(tasks) != set(phases) or len(machine_sequence) != len(tasks) or set(machine_sequence) != set(tasks):
-        raise ValidationError(['ordered canonical phases must correspond exactly to compiled run tasks'])
+    floors = external_release_floors(tasks, edges)
+    planned = {tid for tid, t in tasks.items() if t.external_end is None}
+    if set(planned) != set(phases) or len(machine_sequence) != len(planned) or set(machine_sequence) != planned:
+        raise ValidationError(['ordered canonical phases must correspond exactly to compiled run tasks '
+                               '(supplier milestones take no phase)'])
     done = {pid for pid, t in tasks.items() if t.completed_at is not None}
-    if any(t.mode != 'forward' or t.fixed_start is not None or t.fixed_alternative is not None
-           or t.external_end is not None or (t.completed_at is None and t.duration_seconds <= 0)
+    if any((t.external_end is None and t.mode != 'forward') or t.fixed_start is not None or t.fixed_alternative is not None
+           or (t.external_end is None and t.completed_at is None and t.duration_seconds <= 0)
            for t in tasks.values()):
         raise ValidationError(['staged setup planner currently requires active, unfixed forward run tasks '
                                '(already completed tasks are accepted as history)'])
@@ -155,7 +160,9 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
     machine_prev = {}
     edges_for_run = {pid: [] for pid in machine_sequence}
     for edge in edges:
-        if edge.predecessor in done or edge.successor in done:
+        if (edge.predecessor in done or edge.successor in done
+                or tasks[edge.predecessor].external_end is not None
+                or tasks[edge.successor].external_end is not None):
             continue  # a completed predecessor is already satisfied
         edges_for_run[edge.successor].append(
             Dependency(run_ids[edge.predecessor], edge.kind, edge.lag_seconds))
@@ -197,7 +204,8 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
         stage_ops.append(Operation(
             run_id, f'technical:{pid}', task.duration_seconds,
             run_alts,
-            predecessors=tuple(edges_for_run[pid]), release=task.release,
+            predecessors=tuple(edges_for_run[pid]),
+            release=max(task.release, floors.get(pid, task.release)),
             due=task.due, priority=task.priority, mode='forward',
             splittable=task.splittable and (pid, 'run') not in frozen,
             **stage_pin(pid, 'run', run_alts),

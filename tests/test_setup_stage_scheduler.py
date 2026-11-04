@@ -279,5 +279,53 @@ class CompletedPhaseTests(unittest.TestCase):
         self.assertEqual(m.late_orders, 0)
 
 
+class SupplierMilestoneTests(unittest.TestCase):
+    def _s(self, kind='FS', lag=0):
+        from planning_factory.domain.models import Operation
+        ms = Operation('sup', 'order', 0, (), external_end=dt(day=20, hour=9))
+        return base([ms, op('a', predecessors=(Dependency('sup', kind, lag),))])
+
+    def _contract(self):
+        data = spec()
+        data['phases'] = [data['phases'][0]]
+        return load_setup_contract(json.dumps(data))
+
+    def test_run_waits_for_supplier_end_plus_lag(self):
+        s, c = self._s(lag=3600), self._contract()
+        result = schedule_setup_stages(s, c, ('job:a',))
+        run = next(b for b in result.bookings if b.stage == 'run')
+        self.assertGreaterEqual(run.segments[0].start, dt(day=20, hour=10))
+        self.assertEqual({b.phase_id for b in result.bookings}, {'job:a'})
+        self.assertEqual(audit_stage_capacity(c, s, ('job:a',), result.bookings), ())
+
+    def test_setup_may_precede_supplier_return(self):
+        s, c = self._s(), self._contract()
+        result = schedule_setup_stages(s, c, ('job:a',))
+        setup = next(b for b in result.bookings if b.stage == 'setup')
+        self.assertLess(setup.segments[0].start, dt(day=20, hour=9))
+
+    def test_audit_rejects_run_before_supplier_end(self):
+        s, c = self._s(), self._contract()
+        result = schedule_setup_stages(s, c, ('job:a',))
+        early = tuple(
+            StageBooking(b.phase_id, b.stage,
+                         (Interval(dt(day=19, hour=9), dt(day=19, hour=10)),), b.allocations)
+            if b.stage == 'run' else b for b in result.bookings)
+        errors = audit_stage_capacity(c, s, ('job:a',), early)
+        self.assertTrue(any('supplier milestone' in e for e in errors))
+
+    def test_ss_from_supplier_fails_closed(self):
+        with self.assertRaisesRegex(ValidationError, 'SS from supplier'):
+            schedule_setup_stages(self._s(kind='SS'), self._contract(), ('job:a',))
+
+    def test_search_with_supplier_milestone_and_kpis(self):
+        from planning_factory.engine.setup_sequence_search import (
+            default_machine_sequence, optimize_setup_sequence)
+        s, c = self._s(), self._contract()
+        self.assertEqual(default_machine_sequence(s), ('job:a',))
+        search = optimize_setup_sequence(s, c, objective='delivery')
+        self.assertEqual(search.sequence, ('job:a',))
+
+
 if __name__ == '__main__':
     unittest.main()

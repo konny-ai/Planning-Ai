@@ -28,6 +28,27 @@ class StageBooking:
     allocations: tuple[StageAllocation, ...]
 
 
+def external_release_floors(tasks, edges) -> dict:
+    """Earliest run start imposed by supplier milestones (stated external_end).
+
+    Only finish-to-start is defined for a supplier predecessor: its stated end
+    plus lag. Start-to-start has no meaning without a start, so it fails closed.
+    Milestones themselves are not planned here and take no booking.
+    """
+    floors = {}
+    for edge in edges:
+        pred = tasks[edge.predecessor]
+        if pred.external_end is None or tasks[edge.successor].external_end is not None:
+            continue
+        if edge.kind != 'FS':
+            raise ValidationError([f'{edge.successor}: SS from supplier milestone '
+                                   f'{edge.predecessor} is not supported'])
+        floor = pred.external_end + timedelta(seconds=edge.lag_seconds)
+        if edge.successor not in floors or floors[edge.successor] < floor:
+            floors[edge.successor] = floor
+    return floors
+
+
 def audit_stage_capacity(contract: SetupContract, s: Scenario,
                          machine_sequence: tuple[str, ...],
                          bookings: tuple[StageBooking, ...], *,
@@ -45,8 +66,11 @@ def audit_stage_capacity(contract: SetupContract, s: Scenario,
     if any(o.setup_seconds for o in s.operations) or any(n.setup_seconds for n in s.nestings):
         raise ValidationError(['stage audit requires a run-only v0.2 scenario (no static setup to double-count)'])
     phases = {p.id: p for p in contract.phases}
-    if set(phases) != set(tasks):
-        raise ValidationError(['every compiled job/nesting task needs exactly one canonical phase'])
+    floors = external_release_floors(tasks, edges)
+    planned = {tid for tid, task in tasks.items() if task.external_end is None}
+    if set(phases) != planned:
+        raise ValidationError(['every compiled job/nesting task needs exactly one canonical phase '
+                               '(supplier milestones take none)'])
     if len(machine_sequence) != len(phases) or set(machine_sequence) != set(phases):
         raise ValidationError(['machine sequence must contain each task exactly once'])
     if any(rid not in {r.id for r in s.resources} for rid in
@@ -178,6 +202,8 @@ def audit_stage_capacity(contract: SetupContract, s: Scenario,
         if run and run.segments:
             if run.segments[0].start < tasks[pid].release:
                 errors.append(f'{pid}: processing starts before release or material availability')
+            if pid in floors and run.segments[0].start < floors[pid]:
+                errors.append(f'{pid}: processing starts before supplier milestone end plus lag')
             machine_ready = previous_machine_run_end.get(phase.machine_id)
             if machine_ready is not None:
                 if run.segments[0].start < machine_ready:

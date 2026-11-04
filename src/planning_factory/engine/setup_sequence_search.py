@@ -59,9 +59,10 @@ def sequence_metrics(s: Scenario, solution: StagedSetupResult) -> SequenceMetric
                 if order not in due or item_due < due[order]:
                     due[order] = item_due
     for tid, task in tasks.items():
-        if task.completed_at is None:
-            continue
-        done_at = task.completed_at.astimezone(UTC)
+        stated = task.completed_at if task.completed_at is not None else task.external_end
+        if stated is None:
+            continue  # active task: end comes from its run booking
+        done_at = stated.astimezone(UTC)
         for oid in task.operation_ids:
             order = owner[oid].order_id
             if order not in ends or ends[order] < done_at:
@@ -114,6 +115,11 @@ def default_machine_sequence(s: Scenario) -> tuple[str, ...]:
                 t.release.timestamp() if t.release is not None else 0,
                 t.priority, tid)
 
+    # Supplier milestones are not machine work: they only gate successors.
+    for tid in [x for x, task in tasks.items() if task.external_end is not None]:
+        for nxt in successors[tid]:
+            remaining[nxt] -= 1
+        del remaining[tid]
     ready = [(key(tid), tid) for tid, n in remaining.items() if n == 0]
     heapq.heapify(ready)
     order = []
@@ -124,7 +130,7 @@ def default_machine_sequence(s: Scenario) -> tuple[str, ...]:
             remaining[nxt] -= 1
             if remaining[nxt] == 0:
                 heapq.heappush(ready, (key(nxt), nxt))
-    if len(order) != len(tasks):
+    if len(order) != len(remaining):
         raise ValidationError(['precedence cycle among compiled tasks'])
     return tuple(order)
 
@@ -175,6 +181,7 @@ def optimize_setup_sequence(s: Scenario, contract: SetupContract,
     if type(max_evaluations) is not int or not 1 <= max_evaluations <= 256:
         raise ValueError('max_evaluations must be integer 1..256')
     tasks, _, _ = compile_tasks(s)
+    tasks = {k: v for k, v in tasks.items() if v.external_end is None}
     if len(initial_sequence) != len(tasks) or set(initial_sequence) != set(tasks):
         raise ValidationError(['initial machine sequence must contain each compiled task once'])
     machine_by_task = {p.id: p.machine_id for p in contract.phases}
