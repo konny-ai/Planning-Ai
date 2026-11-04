@@ -41,6 +41,18 @@ guasto silenzioso che la renderebbe inutile e il piano solo piu' lento non passa
 quando un'alternativa non ci sta, e che non superi mai il limite superiore della ricerca (un successore con inizio
 fisso).
 
+## Non rilasciato — test di mutazione delle ricerche di sequenza
+
+Le ricerche (in avanti, backward, partenze multiple) e la generazione delle partenze: da 20 a 31 mutanti su 41
+individuati (restano due equivalenti, perche' il controllo interno limita comunque le valutazioni, e righe di
+docstring). Coperto: sequenza iniziale non valida rifiutata col messaggio giusto (duplicati a parita' di lunghezza, piu'
+lunga, piu' corta); budget di valutazioni usato esattamente e mai superato; la ricerca prosegue su piu' passaggi
+(da 9.000 s di attrezzaggio ben sotto, un ottimo locale dichiarato); `--restarts 0` valido con le due partenze
+nominate; vince la partenza col punteggio migliore (in avanti e backward, con budget 1 che non puo' riparare); le
+partenze perturbate scambiano solo fasi della stessa macchina (provato con tre macchine, con due l'inversione non si
+distingue). Lo strumento di misura rifiuta ora di partire se i test falliscono gia' sul codice originale: un primo
+"41/41" era un falso positivo di questo tipo. Solo test.
+
 ## Non rilasciato — test di mutazione dei comandi CLI `setup-stages` e `staged-plan`
 
 I due blocchi della CLI (circa 270 righe) avevano 24/35 e 6/9 mutanti individuati; ora 31/35 e 9/9. Coperte le

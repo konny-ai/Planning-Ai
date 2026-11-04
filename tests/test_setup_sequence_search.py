@@ -585,3 +585,112 @@ class DelayRoomSemanticsTests(unittest.TestCase):
             s, three(), ('job:a', 'job:b', 'job:c')).bookings}
         for pid, release in result.setup_releases:       # a derived release exists only for a real move
             self.assertGreater(release, forward[(pid, 'setup')].segments[0].start)
+
+
+class SearchBudgetAndStartsTests(unittest.TestCase):
+    """Found by mutation testing of the search loops and of the start generation."""
+
+    def _five_phase_contract(self, machines=None):
+        data = spec()
+        states = ['BLUE', 'RED', 'BLUE', 'RED', 'BLUE']             # the machine starts RED
+        data['phases'] = [dict(data['phases'][0], id=f'job:{n}', target_state=st)
+                          for n, st in zip('abcde', states)]
+        return load_setup_contract(json.dumps(data))
+
+    def test_an_initial_sequence_that_is_not_each_task_once_is_refused_by_every_search(self):
+        from planning_factory.engine.setup_sequence_search import (
+            optimize_backward_sequence, optimize_setup_sequence)
+        s, c = base([op('a', due=dt(day=23, hour=17)), op('b', due=dt(day=23, hour=17)),
+                     op('c', due=dt(day=23, hour=17))]), three()
+        for search in (optimize_setup_sequence, optimize_backward_sequence):
+            for label, sequence in (('duplicate, same length', ('job:a', 'job:a', 'job:c')),
+                                    ('same set, longer', ('job:a', 'job:b', 'job:b', 'job:c')),
+                                    ('shorter', ('job:a', 'job:b'))):
+                with self.subTest(search=search.__name__, label=label), \
+                        self.assertRaisesRegex(ValidationError, 'initial machine sequence must contain'):
+                    search(s, c, sequence, objective='setup', max_evaluations=4)
+
+    def test_the_evaluation_budget_is_used_exactly_never_exceeded(self):
+        from planning_factory.engine.setup_sequence_search import (
+            optimize_backward_sequence, optimize_setup_sequence)
+        s = base([op(n, due=dt(day=23, hour=17)) for n in 'abc'])
+        seq = ('job:a', 'job:b', 'job:c')
+        for budget in (1, 2, 3):
+            forward = optimize_setup_sequence(s, three(), seq, objective='delivery', max_evaluations=budget)
+            backward = optimize_backward_sequence(s, three(), seq, objective='delivery', max_evaluations=budget)
+            with self.subTest(budget=budget):
+                self.assertEqual(forward.evaluated, budget)
+                self.assertEqual(backward.evaluated, budget)
+
+    def test_the_search_keeps_improving_over_several_passes(self):
+        # B R B R B on a machine that starts RED needs several moves to reach R R B B B: one pass is not enough.
+        from planning_factory.engine.setup_sequence_search import (
+            optimize_backward_sequence, optimize_setup_sequence)
+        s = base([op(n, due=dt(day=23, hour=17)) for n in 'abcde'])
+        c = self._five_phase_contract()
+        seq = tuple(f'job:{n}' for n in 'abcde')
+        forward = optimize_setup_sequence(s, c, seq, objective='setup', max_evaluations=80)
+        self.assertEqual(forward.baseline.setup_seconds, 5 * 1800)
+        self.assertLessEqual(forward.selected.setup_seconds, 2 * 1800)    # a local optimum, far below 9000
+        self.assertTrue(forward.improved)
+        self.assertGreater(forward.evaluated, 1 + 4)                       # more than one pass over the 4 swaps
+        backward = optimize_backward_sequence(s, c, seq, objective='setup', max_evaluations=40)
+        self.assertLess(backward.selected.setup_seconds, backward.baseline.setup_seconds)     # 9000 -> fewer setups
+        self.assertGreater(backward.evaluated, 1 + 4)
+
+    def test_restarts_zero_is_valid_and_both_named_starts_are_tried(self):
+        from planning_factory.engine.setup_sequence_search import (
+            optimize_setup_sequence_multistart, state_grouped_sequence)
+        s, c = base([op('a'), op('b'), op('c')]), three()
+        multi = optimize_setup_sequence_multistart(s, c, objective='setup', restarts=0, max_evaluations=1)
+        edd = default_machine_sequence(s)
+        self.assertEqual(multi.starts, (edd, state_grouped_sequence(s, c, edd)))
+        # with a budget of one the search cannot repair a start: the better start must win by score
+        self.assertEqual(multi.best.sequence, state_grouped_sequence(s, c, edd))
+        self.assertEqual(multi.best_start_index, 1)
+        self.assertLess(multi.start_scores[1], multi.start_scores[0])
+
+    def test_backward_multistart_picks_the_start_with_the_best_score(self):
+        from planning_factory.engine.setup_sequence_search import (
+            optimize_backward_sequence_multistart, state_grouped_sequence)
+        s = base([op(n, due=dt(day=23, hour=17)) for n in 'abc'])
+        c = three()
+        multi = optimize_backward_sequence_multistart(s, c, objective='setup', restarts=0, max_evaluations=1)
+        edd = default_machine_sequence(s)
+        self.assertEqual(multi.best.sequence, state_grouped_sequence(s, c, edd))
+        self.assertEqual(multi.best_start_index, 1)
+        self.assertEqual(multi.start_scores[1], min(multi.start_scores))
+        self.assertLess(multi.start_scores[1], multi.start_scores[0])
+
+    def test_perturbed_starts_only_swap_jobs_of_the_same_machine(self):
+        # Three machines: with only two, "swap on the other machine" cannot be told from "on this machine".
+        from planning_factory.domain.models import Resource
+        from planning_factory.engine.setup_sequence_search import _start_orders
+        data = spec()
+        for extra in ('m2', 'm3'):
+            data['resources'].append({'id': extra, 'kind': 'machine'})
+            data['initial_machine_states'][extra] = 'RED'
+        machine_of = {'job:a': 'm', 'job:b': 'm', 'job:c': 'm2', 'job:d': 'm2', 'job:e': 'm3', 'job:f': 'm3'}
+        def phase(pid, machine):
+            template = data['phases'][0]
+            return dict(template, id=pid, machine_id=machine,
+                        setup_requirements=[dict(r, candidate_ids=[machine]) if r['kind'] == 'machine' else r
+                                            for r in template['setup_requirements']],
+                        run_requirements=[dict(r, candidate_ids=[machine]) if r['kind'] == 'machine' else r
+                                          for r in template['run_requirements']])
+        data['phases'] = [phase(p, m) for p, m in machine_of.items()]
+        c = load_setup_contract(json.dumps(data))
+        resources = (Resource('m', 'work', kind='machine'), Resource('m2', 'work', kind='machine'),
+                     Resource('m3', 'work', kind='machine'), Resource('op', 'work', kind='operator'),
+                     Resource('tool', 'work', kind='tool'))
+        s = scenario([op('a'), op('b'), op('c', resource='m2'), op('d', resource='m2'),
+                      op('e', resource='m3'), op('f', resource='m3')], resources=resources)
+        edd = default_machine_sequence(s)
+        starts = _start_orders(s, c, 8, 3)
+        self.assertGreater(len(starts), 2)                       # perturbations really were produced
+        pattern = [machine_of[t] for t in edd]
+        for start in starts:
+            with self.subTest(start=start):
+                self.assertEqual([machine_of[t] for t in start], pattern)      # same machine at every position
+                self.assertEqual(sorted(start), sorted(edd))
+        self.assertEqual(len(starts), len(set(starts)))                          # all distinct
