@@ -41,6 +41,16 @@ guasto silenzioso che la renderebbe inutile e il piano solo piu' lento non passa
 quando un'alternativa non ci sta, e che non superi mai il limite superiore della ricerca (un successore con inizio
 fisso).
 
+## Non rilasciato — proprietà indipendenti sui piani a stadi
+
+`tests/test_staged_precedence_property.py`: due verifiche scritte da zero, che non usano gli archi di `compile_tasks`
+ne' l'audit, sui piani di quattro percorsi (in avanti, backward, parziale, per modalita' di task) su centinaia di
+scenari casuali con completate, fornitori, inizi fissi e lag. (1) Ogni precedenza dichiarata sulle operazioni originali
+(FS e SS, con lag, anche da predecessori completati o fornitori) e' rispettata; sarebbe bastata a trovare il difetto
+del lag da predecessore completato. (2) Nessuna risorsa e' mai prenotata oltre la sua capacita' in nessun istante.
+Entrambe passano senza violazioni, e un controllo negativo per ciascuna dimostra che il verificatore le rileva
+davvero. Nessun difetto trovato. Solo test.
+
 ## Non rilasciato — test di mutazione delle ricerche di sequenza
 
 Le ricerche (in avanti, backward, partenze multiple) e la generazione delle partenze: da 20 a 31 mutanti su 41
