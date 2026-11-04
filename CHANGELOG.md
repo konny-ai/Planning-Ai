@@ -24,6 +24,14 @@ l'eviction non puo' piu' fallire con una chiave gia' rimossa. Non applicati: div
 `setup_sequence_search.py` (819 righe) e l'handler `setup-stages` della CLI (~215 righe): sono
 refactoring ampi senza cambiamento di comportamento.
 
+## Non rilasciato — lag da predecessori completati (correzione)
+
+Nel piano a stadi l'arco da un predecessore gia' completato veniva scartato **insieme al suo lag**: il
+successore partiva troppo presto (con lag di 20 ore, il 19 ottobre invece del 20, come invece fa il
+pianificatore standard) e l'audit indipendente non lo vedeva. Ora il vincolo minimo di avvio
+(`external_release_floors`) comprende `completed_at + lag` per FS e SS, ed e' verificato anche
+dall'audit. Test di regressione che fallisce senza la correzione (3 errori).
+
 ## Non rilasciato — schema del report di `setup-stages`
 
 `contracts/setup-stages-report-v1.schema.json`: il formato del report per le integrazioni. Un

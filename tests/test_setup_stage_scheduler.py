@@ -1,6 +1,7 @@
 """Real two-stage setup/run planning using capacity-scaled canonical resources."""
 import json
 import unittest
+from datetime import timedelta
 
 from planning_factory.domain.models import Dependency, Interval, Resource, Nesting
 from planning_factory.domain.setup_contract import load_setup_contract
@@ -379,6 +380,48 @@ class FixedStartTests(unittest.TestCase):
         result = schedule_setup_stages(s, load_setup_contract(json.dumps(data)), ('job:a',))
         run = next(b for b in result.bookings if b.stage == 'run')
         self.assertEqual(run.segments[0].start, dt(day=19, hour=10))
+
+class CompletedPredecessorLagTests(unittest.TestCase):
+    """A lag from a completed predecessor still binds after its edge leaves the stage scenario
+    (found by code review: the staged plan started the successor a day too early)."""
+
+    def _contract(self):
+        data = spec()
+        data['phases'] = [dict(data['phases'][0], id='job:a'), dict(data['phases'][1], id='job:b')]
+        return load_setup_contract(json.dumps(data))
+
+    def test_run_waits_for_completion_plus_lag_like_the_standard_planner(self):
+        from planning_factory.engine.scheduler import plan
+        c = self._contract()
+        for kind in ('FS', 'SS'):
+            lag = 20 * 3600
+            ops = lambda: [op('a', hours=0, completed_at=dt(hour=0)),
+                           op('b', predecessors=(Dependency('a', kind, lag),))]
+            s = base(ops())
+            standard = next(a for a in plan(scenario(ops())).assignments if a.task_id == 'job:b')
+            result = schedule_setup_stages(s, c, ('job:a', 'job:b'))
+            run = next(b for b in result.bookings if b.phase_id == 'job:b' and b.stage == 'run')
+            with self.subTest(kind=kind):
+                self.assertEqual(run.segments[0].start, standard.segments[0].start)
+                self.assertGreaterEqual(run.segments[0].start, dt(hour=0) + timedelta(seconds=lag))
+                self.assertEqual(audit_stage_capacity(c, s, ('job:a', 'job:b'), result.bookings), ())
+
+    def test_audit_rejects_a_run_that_ignores_the_lag(self):
+        c = self._contract()
+        with_lag = base([op('a', hours=0, completed_at=dt(hour=0)),
+                         op('b', predecessors=(Dependency('a', 'FS', 20 * 3600),))])
+        without_lag = base([op('a', hours=0, completed_at=dt(hour=0)),
+                            op('b', predecessors=(Dependency('a', 'FS', 0),))])
+        early = schedule_setup_stages(without_lag, c, ('job:a', 'job:b'))      # starts on day 19
+        errors = audit_stage_capacity(c, with_lag, ('job:a', 'job:b'), early.bookings)
+        self.assertTrue(any('completed/supplier milestone end plus lag' in e for e in errors), errors)
+
+    def test_zero_lag_and_later_completion_are_unchanged(self):
+        c = self._contract()
+        s = base([op('a', hours=0, completed_at=dt(hour=0)), op('b', predecessors=(Dependency('a', 'FS'),))])
+        run = next(b for b in schedule_setup_stages(s, c, ('job:a', 'job:b')).bookings
+                   if b.phase_id == 'job:b' and b.stage == 'run')
+        self.assertEqual(run.segments[0].start, dt(hour=8))
 
 if __name__ == '__main__':
     unittest.main()

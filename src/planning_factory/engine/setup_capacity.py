@@ -29,21 +29,30 @@ class StageBooking:
 
 
 def external_release_floors(tasks, edges) -> dict:
-    """Earliest run start imposed by supplier milestones (stated external_end).
+    """Earliest run start imposed by completed history and supplier milestones.
 
-    Only finish-to-start is defined for a supplier predecessor: its stated end
-    plus lag. Start-to-start has no meaning without a start, so it fails closed.
-    Milestones themselves are not planned here and take no booking.
+    The standard planner makes a successor wait for ``end + lag`` (FS) or ``start + lag`` (SS) of
+    a predecessor; a completed predecessor ends and starts at its ``completed_at``, so the lag
+    still binds after the edge itself is dropped from the stage scenario. A supplier milestone
+    only has a stated end: finish-to-start is ``external_end + lag``, while start-to-start has no
+    meaning without a start and fails closed. Neither kind of task takes a booking here.
     """
     floors = {}
     for edge in edges:
         pred = tasks[edge.predecessor]
-        if pred.external_end is None or tasks[edge.successor].external_end is not None:
+        succ = tasks[edge.successor]
+        if succ.external_end is not None or succ.completed_at is not None:
             continue
-        if edge.kind != 'FS':
-            raise ValidationError([f'{edge.successor}: SS from supplier milestone '
-                                   f'{edge.predecessor} is not supported'])
-        floor = pred.external_end + timedelta(seconds=edge.lag_seconds)
+        if pred.completed_at is not None:
+            anchor = pred.completed_at
+        elif pred.external_end is not None:
+            if edge.kind != 'FS':
+                raise ValidationError([f'{edge.successor}: SS from supplier milestone '
+                                       f'{edge.predecessor} is not supported'])
+            anchor = pred.external_end
+        else:
+            continue
+        floor = anchor + timedelta(seconds=edge.lag_seconds)
         if edge.successor not in floors or floors[edge.successor] < floor:
             floors[edge.successor] = floor
     return floors
@@ -206,7 +215,7 @@ def audit_stage_capacity(contract: SetupContract, s: Scenario,
                     and run.segments[0].start != tasks[pid].fixed_start):
                 errors.append(f'{pid}: run does not start at its fixed_start')
             if pid in floors and run.segments[0].start < floors[pid]:
-                errors.append(f'{pid}: processing starts before supplier milestone end plus lag')
+                errors.append(f'{pid}: processing starts before the completed/supplier milestone end plus lag')
             machine_ready = previous_machine_run_end.get(phase.machine_id)
             if machine_ready is not None:
                 if run.segments[0].start < machine_ready:
