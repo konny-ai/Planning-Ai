@@ -215,3 +215,20 @@ non esegue attrezzaggio esterno mentre la macchina e' occupata e non
 scrive sul gestionale. La ricerca puo' arrestarsi in un minimo locale:
 per scenari industriali grandi occorrono ulteriori mosse/euristiche
 e benchmark misurati.
+
+
+## Comando `setup-stages`
+
+```sh
+planning-factory setup-stages scenario.json contratto.json -o stadi.json
+planning-factory setup-stages scenario.json contratto.json -o stadi.json \
+  --sequence fase-10,fase-20 --objective setup --neighbourhood insertion --budget 24
+```
+
+Lo scenario deve essere *run-only* (nessun `setup_seconds` v0.2). Senza
+`--sequence` si parte da un ordine per scadenza che rispetta le precedenze; le
+fasi gia' completate, le scadenze fornitore e gli inizi fissi sono gestiti come
+descritto nel CHANGELOG. `stadi.json` contiene sequenza, prenotazioni, KPI e le
+eventuali violazioni dell'audit indipendente (codice di uscita 2 se non vuote).
+Non scrive mai sugli ingressi e non accede a Factory. La modalita' backward
+non e' supportata.

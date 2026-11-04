@@ -1,5 +1,14 @@
 # Changelog
 
+## Non rilasciato — comando `setup-stages`
+
+`planning-factory setup-stages scenario.json contratto.json -o stadi.json`
+pianifica attrezzaggio e lavorazione come stadi separati (ADR 003), con
+sequenza di default per scadenza o `--sequence`, ricerca opzionale
+`--objective delivery|setup|flow` (`--neighbourhood`, `--budget`) e report con
+prenotazioni, KPI e violazioni dell'audit indipendente (codice 2 se presenti).
+Non scrive mai sugli ingressi e non tocca Factory.
+
 ## Non rilasciato — sequenza macchina automatica per lo scheduler setup/run
 
 `optimize_setup_sequence` accetta ora `initial_sequence=None`: la sequenza di

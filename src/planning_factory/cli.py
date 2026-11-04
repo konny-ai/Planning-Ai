@@ -69,6 +69,16 @@ def main(argv=None) -> int:
     setup_plan.add_argument('--budget', type=int, default=12, help='Repair iterations, 1..32')
     setup_plan.add_argument('--html')
     setup_plan.add_argument('--csv')
+    stages = sub.add_parser('setup-stages', help='Plan setup and run as separate audited stages (ADR 003, opt-in)')
+    stages.add_argument('scenario', help='Run-only scenario JSON (no v0.2 setup_seconds)')
+    stages.add_argument('contract', help='Canonical setup contract v1 JSON')
+    stages.add_argument('-o', '--output', required=True, help='Stage plan JSON: sequence, bookings, KPIs, audit')
+    stages.add_argument('--sequence', help='Comma-separated phase order; default: earliest due date, precedence-safe')
+    stages.add_argument('--objective', choices=('delivery', 'setup', 'flow'),
+                        help='Optional bounded sequence search for this explicit objective')
+    stages.add_argument('--neighbourhood', choices=('swap', 'insertion'), default='swap')
+    stages.add_argument('--budget', type=int, default=24, help='Sequence evaluations, 1..256')
+    stages.add_argument('--max-alternatives', type=int, default=32)
     setups = sub.add_parser('audit-setups', help='Audit explicit sequence-changeover rules against a plan')
     setups.add_argument('scenario')
     setups.add_argument('plan')
@@ -239,6 +249,45 @@ def main(argv=None) -> int:
                          'setup_audit': result.setup_audit.to_dict(),
                          'time_limit_reached': result.time_limit_reached}), end='')
             return 0 if result.setup_audit.valid and not result.plan.unscheduled else 2
+        if args.command == 'setup-stages':
+            from .domain.setup_contract import load_setup_contract
+            from .engine.setup_capacity import audit_stage_capacity
+            from .engine.setup_sequence_search import (
+                default_machine_sequence, optimize_setup_sequence, sequence_metrics)
+            from .engine.setup_stage_scheduler import schedule_setup_stages
+            if Path(args.output).resolve() in {Path(args.scenario).resolve(), Path(args.contract).resolve()}:
+                raise ValidationError(['setup-stages output must not overwrite its inputs'])
+            contract = load_setup_contract(Path(args.contract).read_text(encoding='utf-8'))
+            sequence = (tuple(x for x in args.sequence.split(',') if x)
+                        if args.sequence else default_machine_sequence(scenario))
+            search = None
+            if args.objective:
+                search = optimize_setup_sequence(
+                    scenario, contract, sequence, objective=args.objective, max_evaluations=args.budget,
+                    max_alternatives=args.max_alternatives, neighbourhood=args.neighbourhood)
+                solution, sequence = search.winner, search.sequence
+            else:
+                solution = schedule_setup_stages(scenario, contract, sequence,
+                                                 max_alternatives=args.max_alternatives)
+            violations = audit_stage_capacity(contract, scenario, sequence, solution.bookings)
+            report = {
+                'sequence': list(sequence),
+                'bookings': [{'phase_id': b.phase_id, 'stage': b.stage,
+                              'segments': [{'start': i.start.isoformat(), 'end': i.end.isoformat()}
+                                           for i in b.segments],
+                              'allocations': [{'resource_id': a.resource_id, 'occupancy_bps': a.occupancy_bps}
+                                              for a in b.allocations]} for b in solution.bookings],
+                'kpis': sequence_metrics(scenario, solution).as_dict(),
+                'audit_violations': list(violations),
+            }
+            if search is not None:
+                report['search'] = {'objective': search.objective, 'evaluated': search.evaluated,
+                                    'rejected': search.rejected, 'improved': search.improved,
+                                    'baseline': search.baseline.as_dict()}
+            Path(args.output).write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+            print(json.dumps({'sequence': report['sequence'], 'kpis': report['kpis'],
+                              'audit_violations': report['audit_violations']}, sort_keys=True))
+            return 0 if not violations else 2
         if args.command == 'setup-plan':
             rules = load_setup_rules(Path(args.rules).read_text(encoding='utf-8'), scenario)
             result = plan_with_setups(scenario, rules, budget=args.budget)
