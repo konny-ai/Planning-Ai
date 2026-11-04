@@ -148,6 +148,48 @@ class SetupStagesCliTests(unittest.TestCase):
             self.assertNotEqual(code, 0)
             self.assertIn('use one of them', err.getvalue())
 
+    def test_replay_reproduces_a_backward_plan_from_files_only(self):
+        from .helpers import dt
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            due = dt(day=23, hour=17)
+            src, con = self._files(root, [op(n, due=due) for n in 'abc'])
+            out, adjusted, again = root / 'stages.json', root / 'adjusted.json', root / 'again.json'
+            self.assertEqual(run('setup-stages', str(src), str(con), '-o', str(out),
+                                 '--sequence', 'job:a,job:b,job:c', '--backward',
+                                 '--scenario-output', str(adjusted))[0], 0)
+            first = json.loads(out.read_text(encoding='utf-8'))
+            self.assertTrue(first['backward']['setup_releases'])  # a derived release exists
+            # replay on the EXPORTED scenario reproduces the exact bookings
+            code, text = run('setup-stages', str(adjusted), str(con), '-o', str(again), '--replay', str(out))
+            self.assertEqual(code, 0)
+            self.assertTrue(json.loads(text)['replay_matches'])
+            self.assertEqual(json.loads(again.read_text(encoding='utf-8'))['bookings'], first['bookings'])
+            # without the derived setup releases the plan differs: replay must flag it
+            tampered = json.loads(out.read_text(encoding='utf-8'))
+            tampered['backward']['setup_releases'] = {}
+            bad = root / 'tampered.json'
+            bad.write_text(json.dumps(tampered), encoding='utf-8')
+            code, text = run('setup-stages', str(adjusted), str(con), '-o', str(again), '--replay', str(bad))
+            self.assertEqual(code, 2)
+            self.assertFalse(json.loads(text)['replay_matches'])
+
+    def test_replay_rejects_other_options_and_self_overwrite(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src, con = self._files(root)
+            rep = root / 'r.json'
+            rep.write_text('{"sequence": [], "bookings": []}', encoding='utf-8')
+            with redirect_stderr(StringIO()) as err:
+                code, _ = run('setup-stages', str(src), str(con), '-o', str(root / 'o.json'),
+                              '--replay', str(rep), '--backward', '--scenario-output', str(root / 's.json'))
+            self.assertNotEqual(code, 0)
+            self.assertIn('cannot be combined', err.getvalue())
+            with redirect_stderr(StringIO()) as err:
+                code, _ = run('setup-stages', str(src), str(con), '-o', str(rep), '--replay', str(rep))
+            self.assertNotEqual(code, 0)
+            self.assertIn('overwrite', err.getvalue())
+
     def test_task_modes_honours_per_task_backward(self):
         from .helpers import dt
         with TemporaryDirectory() as tmp:

@@ -1,5 +1,13 @@
 # Changelog
 
+## Non rilasciato — riproducibilità: `setup-stages --replay`
+
+I rilasci derivati dei setup non possono stare nello scenario esportato (i setup
+esistono solo come stadi). `--replay REPORT` li ricarica dal report precedente
+insieme alla sequenza, ripianifica sullo scenario esportato, confronta **esattamente**
+le prenotazioni (`replay_matches`) e rilancia l'audit (codice 2 se differiscono o
+se l'audit segnala violazioni). Non si combina con altre opzioni di pianificazione.
+
 ## Non rilasciato — modalità per task nello scheduler a due stadi
 
 `plan_setup_stages_by_mode` / `setup-stages --task-modes --scenario-output ...`

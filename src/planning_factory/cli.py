@@ -17,6 +17,13 @@ from .engine.setup_search import search_setup_alternatives
 from . import canonical_cli, workbook_cli
 
 
+def _bookings_json(bookings):
+    return [{'phase_id': b.phase_id, 'stage': b.stage,
+             'segments': [{'start': i.start.isoformat(), 'end': i.end.isoformat()} for i in b.segments],
+             'allocations': [{'resource_id': a.resource_id, 'occupancy_bps': a.occupancy_bps}
+                             for a in b.allocations]} for b in bookings]
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog='planning-factory')
     sub = parser.add_subparsers(dest='command', required=True)
@@ -85,6 +92,8 @@ def main(argv=None) -> int:
                         help='ADR 005 option A: runs as late as possible, each setup right before its run, machine sequence fixed first; needs --scenario-output')
     stages.add_argument('--task-modes', action='store_true',
                         help='Honour per-task mode forward/backward/auto (auto: due_distance rule); backward tasks get ADR 005 option A; needs --scenario-output')
+    stages.add_argument('--replay', metavar='REPORT',
+                        help='Reproduce a previous setup-stages report on the exported scenario: same sequence and setup releases, exact comparison of the bookings, new audit')
     stages.add_argument('--scenario-output', help='Scenario JSON with the derived releases of --just-in-time-tail')
     stages.add_argument('--budget', type=int, default=24, help='Sequence evaluations, 1..256')
     stages.add_argument('--max-alternatives', type=int, default=32)
@@ -267,6 +276,28 @@ def main(argv=None) -> int:
             if Path(args.output).resolve() in {Path(args.scenario).resolve(), Path(args.contract).resolve()}:
                 raise ValidationError(['setup-stages output must not overwrite its inputs'])
             contract = load_setup_contract(Path(args.contract).read_text(encoding='utf-8'))
+            if args.replay:
+                from datetime import datetime
+                if any((args.backward, args.just_in_time_tail, args.task_modes, args.objective, args.sequence)):
+                    raise ValidationError(['--replay cannot be combined with other planning options'])
+                previous = json.loads(Path(args.replay).read_text(encoding='utf-8'))
+                if Path(args.output).resolve() == Path(args.replay).resolve():
+                    raise ValidationError(['--replay output must not overwrite the report being replayed'])
+                sequence = tuple(previous['sequence'])
+                releases = {pid: datetime.fromisoformat(v) for pid, v in
+                            previous.get('backward', {}).get('setup_releases', {}).items()}
+                solution = schedule_setup_stages(scenario, contract, sequence,
+                                                 max_alternatives=args.max_alternatives,
+                                                 setup_releases=releases)
+                violations = audit_stage_capacity(contract, scenario, sequence, solution.bookings)
+                matches = _bookings_json(solution.bookings) == previous['bookings']
+                report = {'sequence': list(sequence), 'bookings': _bookings_json(solution.bookings),
+                          'kpis': sequence_metrics(scenario, solution).as_dict(),
+                          'audit_violations': list(violations),
+                          'replay': {'matches_previous_bookings': matches, 'setup_releases': len(releases)}}
+                Path(args.output).write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+                print(json.dumps({'replay_matches': matches, 'audit_violations': report['audit_violations']}, sort_keys=True))
+                return 0 if matches and not violations else 2
             sequence = (tuple(x for x in args.sequence.split(',') if x)
                         if args.sequence else default_machine_sequence(scenario))
             if args.start == 'best' and not args.sequence:
@@ -344,11 +375,7 @@ def main(argv=None) -> int:
             violations = audit_stage_capacity(contract, audit_scenario, sequence, solution.bookings)
             report = {
                 'sequence': list(sequence),
-                'bookings': [{'phase_id': b.phase_id, 'stage': b.stage,
-                              'segments': [{'start': i.start.isoformat(), 'end': i.end.isoformat()}
-                                           for i in b.segments],
-                              'allocations': [{'resource_id': a.resource_id, 'occupancy_bps': a.occupancy_bps}
-                                              for a in b.allocations]} for b in solution.bookings],
+                'bookings': _bookings_json(solution.bookings),
                 'kpis': sequence_metrics(audit_scenario, solution).as_dict(),
                 'audit_violations': list(violations),
             }
