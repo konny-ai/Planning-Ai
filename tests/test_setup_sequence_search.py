@@ -398,3 +398,31 @@ class MultiStartTests(unittest.TestCase):
             kwargs = {'objective': 'setup', 'restarts': 1, **bad}
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 optimize_setup_sequence_multistart(s, c, **kwargs)
+
+
+class BackwardMultiStartTests(unittest.TestCase):
+    def _s(self):
+        return base([op(n, due=dt(day=23, hour=17)) for n in 'abc'])
+
+    def test_never_worse_than_single_start_and_deterministic(self):
+        from planning_factory.engine.setup_sequence_search import (
+            optimize_backward_sequence, optimize_backward_sequence_multistart)
+        s, c = self._s(), three()
+        single = optimize_backward_sequence(s, c, default_machine_sequence(s), objective='setup',
+                                            max_evaluations=4)
+        multi = optimize_backward_sequence_multistart(s, c, objective='setup', restarts=2, seed=1,
+                                                      max_evaluations=4)
+        self.assertLessEqual(multi.best.selected.setup_seconds, single.selected.setup_seconds)
+        self.assertEqual(multi.start_scores[multi.best_start_index], min(multi.start_scores))
+        self.assertEqual(multi, optimize_backward_sequence_multistart(
+            s, c, objective='setup', restarts=2, seed=1, max_evaluations=4))
+        self.assertEqual(audit_stage_capacity(c, multi.best.result.scenario, multi.best.sequence,
+                                              multi.best.result.solution.bookings), ())
+
+    def test_validates_arguments(self):
+        from planning_factory.engine.setup_sequence_search import optimize_backward_sequence_multistart
+        s, c = self._s(), three()
+        for bad in ({'restarts': 9}, {'restarts': -1}, {'seed': 'x'}, {'objective': 'flow'}):
+            kwargs = {'objective': 'setup', 'restarts': 1, **bad}
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                optimize_backward_sequence_multistart(s, c, **kwargs)

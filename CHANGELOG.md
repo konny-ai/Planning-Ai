@@ -14,6 +14,17 @@ esatta con piano completo su 250 scenari casuali, su 150 scenari a stadi e sui c
 completate e inizi fissi; stesso hash delle prenotazioni sulle misure: 80 fasi 11,4 s -> 8,9 s,
 160 fasi 32,3 s -> 22,6 s. Il resto del tempo e' nel calcolo degli intervalli liberi.
 
+## Non rilasciato — partenze multiple anche per il backward, errori piu' chiari
+
+`optimize_backward_sequence_multistart` / `setup-stages --backward --objective ... --restarts N --seed S`:
+stesse partenze deterministiche della ricerca in avanti (ordine per scadenza, per stato, N
+perturbazioni), ma ogni candidato e' valutato sul proprio piano backward; mai peggiore della
+partenza singola. `--restarts` resta rifiutato con `--task-modes` e `--partial`. Il codice di
+generazione delle partenze e' condiviso (comportamento in avanti invariato). Un report `--replay`
+malformato ora da' un errore esplicito invece di una chiave mancante. Controllati 25 ingressi malformati
+(JSON rotto, file vuoti o mancanti, contratti non validi, opzioni fuori intervallo): sempre errore JSON e
+codice 1, mai un traceback.
+
 ## Non rilasciato — serializzazione piu' veloce (digest identici)
 
 `primitive()` (usata da `dumps` e da `scenario_digest`) ha un percorso rapido per i tipi base esatti e

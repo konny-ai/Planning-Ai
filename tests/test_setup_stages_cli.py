@@ -174,6 +174,20 @@ class SetupStagesCliTests(unittest.TestCase):
             self.assertEqual(code, 2)
             self.assertFalse(json.loads(text)['replay_matches'])
 
+    def test_replay_rejects_malformed_reports_with_a_clear_message(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src, con = self._files(root)
+            for name, text in (('empty.json', '{}'), ('list.json', '[]'), ('nobookings.json', '{"sequence": []}'),
+                               ('badback.json', '{"sequence": [], "bookings": [], "backward": 3}')):
+                report = root / name
+                report.write_text(text, encoding='utf-8')
+                with self.subTest(name=name), redirect_stderr(StringIO()) as err:
+                    code, _ = run('setup-stages', str(src), str(con), '-o', str(root / 'o.json'),
+                                  '--replay', str(report))
+                self.assertEqual(code, 1)
+                self.assertIn('written by setup-stages', err.getvalue())
+
     def test_replay_rejects_other_options_and_self_overwrite(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -278,13 +292,33 @@ class SetupStagesCliTests(unittest.TestCase):
             self.assertEqual(report['multistart']['seed'], 5)
             self.assertEqual(report['audit_violations'], [])
             self.assertEqual(report['kpis']['setup_seconds'], 1800)
-            for argv, message in ((['--restarts', '2'], 'requires --objective'),
-                                  (['--objective', 'setup', '--restarts', '2', '--backward',
-                                    '--scenario-output', str(root / 's.json')], 'only available')):
+            for argv, messages in ((['--restarts', '2'], ('requires --objective',)),
+                                   (['--objective', 'setup', '--restarts', '2', '--partial'],
+                                    ('only be combined', 'only available')),
+                                   (['--objective', 'setup', '--restarts', '2', '--task-modes'],
+                                    ('cannot be combined', 'only available'))):
                 with self.subTest(argv=argv), redirect_stderr(StringIO()) as err:
                     code, _ = run('setup-stages', str(src), str(con), '-o', str(out), *argv)
                 self.assertNotEqual(code, 0)
-                self.assertIn(message, err.getvalue())
+                self.assertTrue(any(m in err.getvalue() for m in messages), err.getvalue())
+
+    def test_restarts_also_work_with_backward(self):
+        from .helpers import dt
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            due = dt(day=23, hour=17)
+            src, con = self._files(root, [op(n, due=due) for n in 'abc'])
+            out, adj = root / 'stages.json', root / 'adj.json'
+            code, _ = run('setup-stages', str(src), str(con), '-o', str(out), '--backward',
+                          '--scenario-output', str(adj), '--objective', 'setup', '--restarts', '2',
+                          '--seed', '3', '--budget', '4')
+            self.assertEqual(code, 0)
+            report = json.loads(out.read_text(encoding='utf-8'))
+            self.assertGreaterEqual(report['multistart']['starts'], 2)
+            self.assertEqual(report['search']['evaluated_on'], 'backward plan')
+            self.assertEqual(report['audit_violations'], [])
+            self.assertEqual(report['kpis']['setup_seconds'], 1800)
+            self.assertEqual(report['backward']['option'], 'A')
 
     def test_refuses_to_overwrite_inputs(self):
         with TemporaryDirectory() as tmp:

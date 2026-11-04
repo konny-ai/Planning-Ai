@@ -30,7 +30,7 @@ e' 2 se l'audit ne trova. Nell'esempio l'attrezzaggio totale e' 5.400 s.
 | `--sequence a,b,c` | ordine esplicito delle fasi |
 | `--start state-grouped` / `best` | partenza che raggruppa gli stati obiettivo; `best` richiede `--objective` |
 | `--objective delivery\|setup\|flow` | ricerca locale a budget (`--budget`, `--neighbourhood swap\|insertion`) |
-| `--restarts N --seed S` | ripete la ricerca da piu' partenze deterministiche e tiene la migliore |
+| `--restarts N --seed S` | ripete la ricerca da piu' partenze deterministiche e tiene la migliore (anche con `--backward`, dove ogni candidato e' valutato sul proprio piano backward; non con `--task-modes` e `--partial`) |
 
 ```sh
 planning-factory setup-stages examples/setup-stages/scenario.json \

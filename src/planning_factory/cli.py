@@ -399,6 +399,11 @@ def main(argv=None) -> int:
                 if any((args.backward, args.just_in_time_tail, args.task_modes, args.objective, args.sequence)):
                     raise ValidationError(['--replay cannot be combined with other planning options'])
                 previous = json.loads(Path(args.replay).read_text(encoding='utf-8'))
+                if (not isinstance(previous, dict) or not isinstance(previous.get('sequence'), list)
+                        or not isinstance(previous.get('bookings'), list)
+                        or not isinstance(previous.get('backward', {}), dict)):
+                    raise ValidationError(['--replay needs a report written by setup-stages '
+                                           '(with sequence and bookings)'])
                 if Path(args.output).resolve() == Path(args.replay).resolve():
                     raise ValidationError(['--replay output must not overwrite the report being replayed'])
                 sequence = tuple(previous['sequence'])
@@ -438,16 +443,24 @@ def main(argv=None) -> int:
                     pass  # infeasible grouping: keep the due-date order
             if args.restarts and not args.objective:
                 raise ValidationError(['--restarts requires --objective'])
-            if args.restarts and (args.backward or args.task_modes or args.partial):
-                raise ValidationError(['--restarts is only available for the forward sequence search '
-                                       '(not with --backward, --task-modes or --partial)'])
+            if args.restarts and (args.task_modes or args.partial):
+                raise ValidationError(['--restarts is only available for the sequence search '
+                                       '(not with --task-modes or --partial)'])
             search = None
             backward_search = None
             if args.objective and args.backward:
                 from .engine.setup_sequence_search import optimize_backward_sequence
-                backward_search = optimize_backward_sequence(
-                    scenario, contract, sequence, objective=args.objective, max_evaluations=args.budget,
-                    max_alternatives=args.max_alternatives, neighbourhood=args.neighbourhood)
+                if args.restarts:
+                    from .engine.setup_sequence_search import optimize_backward_sequence_multistart
+                    multi = optimize_backward_sequence_multistart(
+                        scenario, contract, objective=args.objective, restarts=args.restarts, seed=args.seed,
+                        max_evaluations=args.budget, max_alternatives=args.max_alternatives,
+                        neighbourhood=args.neighbourhood)
+                    backward_search = multi.best
+                else:
+                    backward_search = optimize_backward_sequence(
+                        scenario, contract, sequence, objective=args.objective, max_evaluations=args.budget,
+                        max_alternatives=args.max_alternatives, neighbourhood=args.neighbourhood)
                 sequence = backward_search.sequence
                 solution = backward_search.result.solution
             elif args.objective and args.restarts:
@@ -532,7 +545,7 @@ def main(argv=None) -> int:
                                     'baseline': backward_search.baseline.as_dict(),
                                     'baseline_gap_seconds': backward_search.baseline_gap_seconds,
                                     'selected_gap_seconds': backward_search.selected_gap_seconds}
-            if search is not None and args.restarts and not args.backward:
+            if args.restarts and (search is not None or backward_search is not None):
                 report['multistart'] = {'starts': len(multi.starts), 'best_start_index': multi.best_start_index,
                                         'evaluated': multi.evaluated, 'rejected_starts': multi.rejected_starts,
                                         'seed': args.seed}

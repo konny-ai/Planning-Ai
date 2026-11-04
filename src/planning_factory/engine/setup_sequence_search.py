@@ -701,6 +701,33 @@ def plan_setup_stages_by_mode(s: Scenario, contract: SetupContract,
     return ModeAwareResult(result, tuple(sorted(resolved.items())))
 
 
+def _start_orders(s: Scenario, contract: SetupContract, restarts, seed) -> list[tuple[str, ...]]:
+    """Distinct deterministic starts: due-date order, state-grouped order, then perturbations."""
+    import random
+    if type(restarts) is not int or not 0 <= restarts <= 8:
+        raise ValueError('restarts must be an integer between 0 and 8')
+    if type(seed) is not int:
+        raise ValueError('seed must be an integer')
+    edd = default_machine_sequence(s)
+    machine_by_task = {p.id: p.machine_id for p in contract.phases}
+    starts = [edd]
+    grouped = state_grouped_sequence(s, contract, edd)
+    if grouped != edd:
+        starts.append(grouped)
+    rng = random.Random(seed)
+    for _ in range(restarts):
+        order = list(edd)
+        for _ in range(3):
+            machine = rng.choice(sorted(set(machine_by_task.values())))
+            slots = [i for i, tid in enumerate(order) if machine_by_task[tid] == machine]
+            if len(slots) >= 2:
+                a, b = rng.sample(slots, 2)
+                order[a], order[b] = order[b], order[a]
+        if tuple(order) not in starts:
+            starts.append(tuple(order))
+    return starts
+
+
 @dataclass(frozen=True)
 class MultiStartSearch:
     best: SequenceSearch
@@ -724,29 +751,8 @@ def optimize_setup_sequence_multistart(s: Scenario, contract: SetupContract, *,
     is at most (2 + restarts) searches of ``max_evaluations`` each. No claim of
     global optimality.
     """
-    import random
-    if type(restarts) is not int or not 0 <= restarts <= 8:
-        raise ValueError('restarts must be an integer between 0 and 8')
-    if type(seed) is not int:
-        raise ValueError('seed must be an integer')
     _score(SequenceMetrics(0, 0, 0, 0), objective)
-    edd = default_machine_sequence(s)
-    machine_by_task = {p.id: p.machine_id for p in contract.phases}
-    starts = [edd]
-    grouped = state_grouped_sequence(s, contract, edd)
-    if grouped != edd:
-        starts.append(grouped)
-    rng = random.Random(seed)
-    for _ in range(restarts):
-        order = list(edd)
-        for _ in range(3):
-            machine = rng.choice(sorted(set(machine_by_task.values())))
-            slots = [i for i, tid in enumerate(order) if machine_by_task[tid] == machine]
-            if len(slots) >= 2:
-                a, b = rng.sample(slots, 2)
-                order[a], order[b] = order[b], order[a]
-        if tuple(order) not in starts:
-            starts.append(tuple(order))
+    starts = _start_orders(s, contract, restarts, seed)
     results, scores, kept, rejected, evaluated = [], [], [], 0, 0
     for start in starts:
         try:
@@ -766,3 +772,48 @@ def optimize_setup_sequence_multistart(s: Scenario, contract: SetupContract, *,
     best_index = min(range(len(results)), key=lambda i: (scores[i], i))
     return MultiStartSearch(results[best_index], tuple(kept), tuple(scores),
                             best_index, evaluated, rejected)
+
+
+@dataclass(frozen=True)
+class BackwardMultiStartSearch:
+    best: BackwardSequenceSearch
+    starts: tuple[tuple[str, ...], ...]
+    start_scores: tuple[tuple, ...]
+    best_start_index: int
+    evaluated: int
+    rejected_starts: int
+
+
+def optimize_backward_sequence_multistart(s: Scenario, contract: SetupContract, *,
+                                          objective: str, restarts: int = 2, seed: int = 0,
+                                          max_evaluations: int = 12, max_alternatives: int = 32,
+                                          neighbourhood: str = 'swap',
+                                          frozen_bookings: tuple = ()) -> BackwardMultiStartSearch:
+    """``optimize_backward_sequence`` from the same deterministic starts as the forward multi-start.
+
+    Each start runs the bounded search scored on its own option-A plan; infeasible starts are
+    skipped; the best score wins and ties keep the earliest start, so the result is never worse
+    than the single due-date start. Cost: at most (2 + restarts) searches of ``max_evaluations``
+    backward plans each, so keep the budget small. No claim of global optimality.
+    """
+    _backward_score(SequenceMetrics(0, 0, 0, 0), 0, objective)
+    starts = _start_orders(s, contract, restarts, seed)
+    results, kept, scores, rejected, evaluated = [], [], [], 0, 0
+    for start in starts:
+        try:
+            found = optimize_backward_sequence(
+                s, contract, start, objective=objective, max_evaluations=max_evaluations,
+                max_alternatives=max_alternatives, neighbourhood=neighbourhood,
+                frozen_bookings=frozen_bookings)
+        except ValidationError:
+            rejected += 1
+            continue
+        results.append(found)
+        kept.append(start)
+        scores.append(_backward_score(found.selected, found.selected_gap_seconds, objective))
+        evaluated += found.evaluated
+    if not results:
+        raise ValidationError(['no feasible start order'])
+    best_index = min(range(len(results)), key=lambda i: (scores[i], i))
+    return BackwardMultiStartSearch(results[best_index], tuple(kept), tuple(scores),
+                                    best_index, evaluated, rejected)
