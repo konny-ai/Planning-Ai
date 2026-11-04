@@ -88,7 +88,8 @@ Il confronto `integrations/factory-export/tools/compare_bench.py` può ora emett
 - [x] Collaudo di pubblicazione sul clone banco A (20/10/2026): run 39440561563, 769 fasi e 721 blocchi; `--verify` senza differenze. Restano da validare le scelte di business del cliente.
 - [ ] Autorizzare nel collaudo (#3) la pubblicazione sul database cliente **solo** dopo accettazione funzionale del nuovo motore e verifica tecnica dei trigger, senza richiedere parita' legacy.
 - [x] Gestione eccezioni e variazioni calendario Factory nel convertitore (PR #38).
-- [ ] Setup dinamici e strategia esplicita per le fasi senza risorse candidate, sulla base delle regole produttive approvate (proposta con opzioni in [ADR 006](decisions/006-fasi-senza-risorse-candidate-proposta.md), in attesa di decisione).
+- [x] Strategia esplicita per le fasi senza risorse candidate: opzione B ([ADR 006](decisions/006-fasi-senza-risorse-candidate-proposta.md)), opt-in con `setup-stages --partial`.
+- [ ] Setup dinamici (stato macchina rilevato, preattrezzaggio esterno): domande aperte in ADR 006.
 
 ## Ottimizzazione indipendente dal DB Factory (incremento sperimentale)
 

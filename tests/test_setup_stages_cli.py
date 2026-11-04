@@ -223,6 +223,48 @@ class SetupStagesCliTests(unittest.TestCase):
             self.assertNotEqual(code, 0)
             self.assertIn('cannot be combined', err.getvalue())
 
+    def test_partial_plans_the_plannable_and_reports_the_rest(self):
+        from planning_factory.domain.models import Dependency
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ops = [op('a'), op('x'), op('c', predecessors=(Dependency('x', 'FS'),)), op('b')]
+            data = _three_spec()
+            data['phases'] = [dict(data['phases'][0], id=f'job:{n}') for n in 'abc']
+            src, con = self._files(root, ops, data)
+            out = root / 'stages.json'
+            with redirect_stderr(StringIO()):                   # strict mode still fails closed
+                self.assertNotEqual(run('setup-stages', str(src), str(con), '-o', str(out))[0], 0)
+            code, text = run('setup-stages', str(src), str(con), '-o', str(out), '--partial',
+                             '--no-candidate', 'x')
+            self.assertEqual(code, 0)
+            report = json.loads(out.read_text(encoding='utf-8'))
+            self.assertEqual({u['operation_id']: u['code'] for u in report['unplanned']},
+                             {'x': 'NO_CANDIDATE', 'c': 'PREDECESSOR_UNPLANNED'})
+            self.assertEqual(sorted({b['phase_id'] for b in report['bookings']}), ['job:a', 'job:b'])
+            self.assertEqual(json.loads(text)['planned'], ['job:a', 'job:b'])
+            self.assertEqual(report['audit_violations'], [])
+
+    def test_partial_with_no_candidate_option_and_backward(self):
+        from .helpers import dt
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            due = dt(day=23, hour=17)
+            data = _three_spec()
+            src, con = self._files(root, [op(n, due=due) for n in 'abc'], data)
+            out, adjusted = root / 'stages.json', root / 'adj.json'
+            code, _ = run('setup-stages', str(src), str(con), '-o', str(out), '--partial',
+                          '--no-candidate', 'b', '--backward', '--scenario-output', str(adjusted))
+            self.assertEqual(code, 0)
+            report = json.loads(out.read_text(encoding='utf-8'))
+            self.assertEqual([u['operation_id'] for u in report['unplanned']], ['b'])
+            self.assertEqual(sorted({b['phase_id'] for b in report['bookings']}), ['job:a', 'job:c'])
+            self.assertEqual(report['backward']['option'], 'A')
+            self.assertTrue(adjusted.exists())
+            with redirect_stderr(StringIO()) as err:
+                code, _ = run('setup-stages', str(src), str(con), '-o', str(out), '--partial', '--objective', 'setup')
+            self.assertNotEqual(code, 0)
+            self.assertIn('--partial can only be combined', err.getvalue())
+
     def test_refuses_to_overwrite_inputs(self):
         with TemporaryDirectory() as tmp:
             src, con = self._files(Path(tmp))

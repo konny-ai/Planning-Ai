@@ -1,5 +1,13 @@
 # Changelog
 
+## Non rilasciato — fasi senza risorse candidate (ADR 006, opzione B)
+
+`plan_setup_stages_partial` / `setup-stages --partial [--no-candidate ...]`: si pianifica
+cio' che ha candidate e si riporta il resto come non pianificato con codice
+(`NO_CANDIDATE`, `PREDECESSOR_UNPLANNED`, `NEST_MEMBER_UNPLANNED`). Compatibile con
+`--backward`. Il comportamento di default resta bloccante; nessuna risorsa, durata o
+data inventata; piano restante auditato. I setup dinamici restano aperti.
+
 ## Non rilasciato — backward nel workbook Excel
 
 Il foglio `objective` (prima sempre rifiutato) accetta righe `kind = politica` con

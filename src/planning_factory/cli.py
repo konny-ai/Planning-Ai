@@ -94,6 +94,10 @@ def main(argv=None) -> int:
                         help='Honour per-task mode forward/backward/auto (auto: due_distance rule); backward tasks get ADR 005 option A; needs --scenario-output')
     stages.add_argument('--replay', metavar='REPORT',
                         help='Reproduce a previous setup-stages report on the exported scenario: same sequence and setup releases, exact comparison of the bookings, new audit')
+    stages.add_argument('--partial', action='store_true',
+                        help='ADR 006 option B: plan what has candidate resources and report the rest as not planned (NO_CANDIDATE, PREDECESSOR_UNPLANNED, NEST_MEMBER_UNPLANNED); may add --backward')
+    stages.add_argument('--no-candidate', default='',
+                        help='With --partial: comma-separated operation IDs to treat as having no candidate resource')
     stages.add_argument('--scenario-output', help='Scenario JSON with the derived releases of --just-in-time-tail')
     stages.add_argument('--budget', type=int, default=24, help='Sequence evaluations, 1..256')
     stages.add_argument('--max-alternatives', type=int, default=32)
@@ -276,6 +280,43 @@ def main(argv=None) -> int:
             if Path(args.output).resolve() in {Path(args.scenario).resolve(), Path(args.contract).resolve()}:
                 raise ValidationError(['setup-stages output must not overwrite its inputs'])
             contract = load_setup_contract(Path(args.contract).read_text(encoding='utf-8'))
+            if args.partial:
+                from .engine.setup_partial import plan_setup_stages_partial
+                if any((args.replay, args.just_in_time_tail, args.task_modes, args.objective)):
+                    raise ValidationError(['--partial can only be combined with --backward, --sequence and --no-candidate'])
+                if args.backward:
+                    if not args.scenario_output:
+                        raise ValidationError(['--backward requires --scenario-output'])
+                    if Path(args.scenario_output).resolve() in {Path(args.scenario).resolve(), Path(args.contract).resolve(), Path(args.output).resolve()}:
+                        raise ValidationError(['--scenario-output must be a distinct new file'])
+                given = tuple(x for x in args.sequence.split(',') if x) if args.sequence else None
+                extra = tuple(x for x in args.no_candidate.split(',') if x)
+                part = plan_setup_stages_partial(scenario, contract, given, extra_without_candidates=extra,
+                                                 backward=args.backward, max_alternatives=args.max_alternatives)
+                report = {'unplanned': [{'operation_id': u.operation_id, 'code': u.code, 'detail': u.detail}
+                                        for u in part.unplanned],
+                          'sequence': list(part.machine_sequence), 'bookings': [], 'kpis': None,
+                          'audit_violations': []}
+                if part.staged is not None:
+                    violations = audit_stage_capacity(part.contract, part.scenario, part.machine_sequence,
+                                                      part.staged.bookings)
+                    report.update(bookings=_bookings_json(part.staged.bookings),
+                                  audit_violations=list(violations))
+                    try:
+                        report['kpis'] = sequence_metrics(part.scenario, part.staged).as_dict()
+                    except ValidationError:
+                        report['kpis'] = None  # some orders have no planned task: KPIs not defined
+                    if part.backward is not None:
+                        report['backward'] = {'option': 'A', 'delayed_runs': [
+                            {'phase_id': p, 'seconds': s} for p, s in part.backward.delayed_runs],
+                            'setup_gaps_seconds': dict(part.backward.setup_gaps),
+                            'setup_releases': {p: r.isoformat() for p, r in part.backward.setup_releases}}
+                        Path(args.scenario_output).write_text(dumps(part.scenario), encoding='utf-8')
+                Path(args.output).write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+                print(json.dumps({'planned': sorted({b['phase_id'] for b in report['bookings']}),
+                                  'unplanned': report['unplanned'],
+                                  'audit_violations': report['audit_violations']}, sort_keys=True))
+                return 0 if not report['audit_violations'] else 2
             if args.replay:
                 from datetime import datetime
                 if any((args.backward, args.just_in_time_tail, args.task_modes, args.objective, args.sequence)):

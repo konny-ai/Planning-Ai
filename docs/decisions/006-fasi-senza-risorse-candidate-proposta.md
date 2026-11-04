@@ -1,8 +1,9 @@
 # ADR 006 — Fasi senza risorse candidate e setup dinamici (PROPOSTA)
 
-**Stato:** proposta, **non approvata**. Nessun codice la implementa. Serve a
-ridurre la scelta del committente a una risposta, come ADR 005. Chiude il punto
-aperto della roadmap "strategia esplicita per le fasi senza risorse candidate".
+**Stato:** il committente ha scelto l'**opzione B** (04/11/2026), implementata
+come percorso opt-in (vedi sezione finale). Il comportamento di default resta
+bloccante (A). Chiude il punto della roadmap "strategia esplicita per le fasi senza
+risorse candidate"; i setup dinamici restano aperti.
 
 ## Comportamento attuale (verificato nel codice)
 
@@ -65,3 +66,25 @@ mentre la macchina lavora. Finché non sono risposte, uno stato sconosciuto
 Audit indipendente di ogni piano, nessuna risorsa o tempo inventato, nessuna
 matrice di transizioni inventata, nessun peso numerico non approvato, nessuna
 scrittura su Factory.
+
+## Decisione e implementazione (opzione B)
+
+Scelta del committente: **B** — il resto del piano si calcola e le fasi senza
+risorse candidate risultano non pianificate con motivo esplicito.
+
+- Libreria: `plan_setup_stages_partial` (`engine/setup_partial.py`). Una fase e'
+  "senza candidate" se l'operazione non ha alternative (e non e' completata ne'
+  traguardo fornitore) oppure se e' indicata in `extra_without_candidates`.
+- Codici: `NO_CANDIDATE`; `PREDECESSOR_UNPLANNED` per i successori (transitivi);
+  `NEST_MEMBER_UNPLANNED` per gli altri membri di un nesting che contiene una fase
+  non pianificabile (il nesting e' una sola attivita' indivisibile).
+- CLI: `setup-stages --partial [--no-candidate ID,ID] [--backward --scenario-output ...]`.
+  Un Scenario JSON non puo' contenere operazioni senza alternative (il caricamento le
+  rifiuta), quindi dalla CLI si dichiarano con `--no-candidate`, ad esempio con gli
+  ID del controllo qualita' `no_resource`.
+- Nessuna risorsa, durata o data viene inventata; il piano restante e' auditato; le
+  prenotazioni congelate di fasi non pianificate sono rifiutate; con nulla di
+  pianificabile il risultato non ha piano e solo l'elenco delle non pianificate.
+- I KPI di consegna non sono definiti per le commesse senza alcuna fase pianificata
+  (il report li omette); le commesse con fasi non pianificate vanno lette insieme
+  all'elenco `unplanned`, non come consegne rispettate.
