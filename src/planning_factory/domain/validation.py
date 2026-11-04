@@ -124,6 +124,8 @@ def validate(s: Scenario) -> None:
                 raise ValidationError([f'{o.id}: empty resource bundle'])
             for d in alternative.demands:
                 whole(d.units, f'{o.id} demand units', 1)
+                if not isinstance(d.resource_id, str):   # a list or dict would fail as 'unhashable'
+                    raise ValidationError([f'{o.id}: resource ID must be text'])
                 if d.resource_id not in resources or d.resource_id in ids:
                     raise ValidationError([f'{o.id}: unknown or duplicate resource {d.resource_id}'])
                 ids.add(d.resource_id)

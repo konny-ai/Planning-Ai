@@ -44,6 +44,15 @@ class ValidationTests(unittest.TestCase):
     def test_incompatible_nesting_modes(self):
         self.reject(scenario([op('a'), op('b', mode='backward')], nestings=(Nesting('n', ('a', 'b'), 3600),)))
 
+    def test_resource_id_of_the_wrong_type_gets_a_clear_message(self):
+        # Found by fuzzing the scenario JSON: a list or dict leaked "unhashable type" from a set lookup.
+        from planning_factory.domain.models import Alternative, Demand, Operation
+        for bad in ([], {}, ['m'], 5, None):
+            with self.subTest(resource_id=bad):
+                s = scenario([Operation('a', 'o', 3600, (Alternative((Demand(bad, 1),)),))])
+                with self.assertRaisesRegex(ValidationError, 'resource ID must be text'):
+                    compile_tasks(s)
+
     def test_missing_resource(self):
         self.reject(scenario([op(resource='unknown')]))
 

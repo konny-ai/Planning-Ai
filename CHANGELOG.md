@@ -24,6 +24,14 @@ l'eviction non puo' piu' fallire con una chiave gia' rimossa. Non applicati: div
 `setup_sequence_search.py` (819 righe) e l'handler `setup-stages` della CLI (~215 righe): sono
 refactoring ampi senza cambiamento di comportamento.
 
+## Non rilasciato — fuzzing dello scenario JSON
+
+Stesso metodo sullo scenario passato a `setup-stages` (2.055 mutazioni di campo): nessuna eccezione
+grezza; un solo messaggio poco chiaro, `unhashable type: 'list'` quando `resource_id` di una richiesta di
+risorsa era una lista o un dizionario. Ora la validazione dice `resource ID must be text` indicando
+l'operazione. Test per mutazione (5 casi falliscono senza la correzione). Dopo la correzione 0 casi non
+chiari sui tre ingressi esterni (specifica v0.3, contratto/report replay, scenario).
+
 ## Non rilasciato — fuzzing degli ingressi esterni (specifica v0.3, contratto, report replay)
 
 Ogni campo della specifica `staged-plan`, del contratto e del report di `--replay` e' stato sostituito con
