@@ -6,7 +6,7 @@ production database, GUI, or legacy equivalence is involved.
 """
 import heapq
 from dataclasses import dataclass, replace
-from datetime import UTC
+from datetime import UTC, timedelta
 from planning_factory.domain.models import Scenario
 from planning_factory.domain.setup_contract import SetupContract
 from planning_factory.domain.validation import ValidationError, compile_tasks
@@ -295,9 +295,11 @@ def just_in_time_tail(s: Scenario, contract: SetupContract,
                       max_alternatives: int = 32) -> JustInTimeResult:
     """EXPERIMENTAL, opt-in, not an approved rule (see ADR 005, option B-like).
 
-    Delays the production run of each *terminal* task (last on its machine and
-    without successors) by its delivery slack, keeping its setup as early as
-    the resources allow. A candidate is kept only if the whole staged plan is
+    Delays the production run of a task by the room it has before anything
+    else would have to move: its delivery slack, the gap to its successors
+    (FS/SS with lag) and the gap to the next job on its machine. Tasks are
+    visited from the last to the first; the setup stays as early as the
+    resources allow. A candidate is kept only if the whole staged plan is
     re-planned and audited, every OTHER phase's bookings are unchanged and the
     KPIs do not get worse; otherwise it is reported as rejected. The delay is
     expressed as a derived release in the returned scenario, never applied to
@@ -307,25 +309,47 @@ def just_in_time_tail(s: Scenario, contract: SetupContract,
     base = schedule_setup_stages(s, contract, machine_sequence,
                                  max_alternatives=max_alternatives)
     baseline = sequence_metrics(s, base)
-    has_successor = {e.predecessor for e in edges}
     phases = {p.id: p for p in contract.phases}
-    last_on_machine = {}
-    for pid in machine_sequence:
-        if tasks[pid].completed_at is None:
-            last_on_machine[phases[pid].machine_id] = pid
+    active = [pid for pid in machine_sequence if tasks[pid].completed_at is None]
+    succ = {}
+    for e in edges:
+        if (tasks[e.predecessor].external_end is None and tasks[e.successor].external_end is None
+                and tasks[e.predecessor].completed_at is None and tasks[e.successor].completed_at is None):
+            succ.setdefault(e.predecessor, []).append(e)
+    next_on_machine = {}
+    for k, pid in enumerate(active):
+        for later in active[k + 1:]:
+            if phases[later].machine_id == phases[pid].machine_id:
+                next_on_machine[pid] = later
+                break
     current_s, current, metrics = s, base, baseline
     delayed, rejected = [], []
-    for pid in sorted(last_on_machine.values()):
-        task = tasks[pid]
-        if pid in has_successor or task.due is None:
-            continue
+
+    def room(pid):
+        """Largest delay of this run that moves nothing else, or None if unbounded."""
         run = next(b for b in current.bookings if b.phase_id == pid and b.stage == 'run')
-        slack = int((task.due - run.segments[-1].end).total_seconds())
-        if slack <= 0:
+        limits = []
+        if tasks[pid].due is not None:
+            limits.append(tasks[pid].due - run.segments[-1].end)
+        for e in succ.get(pid, ()):
+            nxt = next(b for b in current.bookings if b.phase_id == e.successor and b.stage == 'run')
+            anchor_end = run.segments[-1].end if e.kind == 'FS' else run.segments[0].start
+            limits.append(nxt.segments[0].start - anchor_end - timedelta(seconds=e.lag_seconds))
+        if pid in next_on_machine:
+            first = min(b.segments[0].start for b in current.bookings
+                        if b.phase_id == next_on_machine[pid])
+            limits.append(first - run.segments[-1].end)
+        return run, (min(limits) if limits else None)
+
+    for pid in reversed(active):
+        task = tasks[pid]
+        run, limit = room(pid)
+        if limit is None or limit.total_seconds() <= 0:
             continue
+        slack = limit
         members = set(task.operation_ids)
         accepted = None
-        shift = task.due - run.segments[-1].end
+        shift = slack
         # Wall-clock slack ignores calendars: when the full delay is infeasible
         # (non-working days, horizon end) try progressively smaller delays.
         for _ in range(6):

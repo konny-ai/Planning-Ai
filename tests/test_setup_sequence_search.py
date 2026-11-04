@@ -197,12 +197,17 @@ class JustInTimeTailTests(unittest.TestCase):
         c = load_setup_contract(json.dumps(spec()))
         seq = ('job:a', 'job:b')
         result = just_in_time_tail(s, c, seq)
-        self.assertEqual([pid for pid, _ in result.delayed], ['job:b'])
+        self.assertEqual({pid for pid, _ in result.delayed}, {'job:a', 'job:b'})
         before = {(b.phase_id, b.stage): b for b in schedule_setup_stages(s, c, seq).bookings}
         after = {(b.phase_id, b.stage): b for b in result.solution.bookings}
-        self.assertEqual(before[('job:a', 'run')], after[('job:a', 'run')])
+        # setup stays early, both runs moved later, machine order preserved
+        self.assertEqual(before[('job:a', 'setup')], after[('job:a', 'setup')])
         self.assertGreater(after[('job:b', 'run')].segments[0].start,
                            before[('job:b', 'run')].segments[0].start)
+        self.assertGreater(after[('job:a', 'run')].segments[0].start,
+                           before[('job:a', 'run')].segments[0].start)
+        self.assertLessEqual(after[('job:a', 'run')].segments[-1].end,
+                             after[('job:b', 'run')].segments[0].start)
         self.assertEqual(result.selected.late_orders, 0)
         self.assertEqual(audit_stage_capacity(c, result.scenario, seq,
                                               result.solution.bookings), ())
@@ -216,3 +221,28 @@ class JustInTimeTailTests(unittest.TestCase):
         result = just_in_time_tail(s, c, ('job:a', 'job:b'))
         self.assertEqual(result.delayed, ())
         self.assertEqual(result.scenario, s)
+
+    def test_task_with_successor_on_other_machine_is_delayed_within_gap(self):
+        from planning_factory.engine.setup_sequence_search import just_in_time_tail
+        from planning_factory.domain.models import Dependency as Dep
+        data = spec()
+        data['resources'].append({'id': 'm2', 'kind': 'machine'})
+        data['initial_machine_states']['m2'] = 'RED'
+        data['phases'][1] = dict(data['phases'][1], machine_id='m2',
+                                 setup_requirements=[dict(r, candidate_ids=['m2']) if r['kind'] == 'machine' else r
+                                                     for r in data['phases'][1]['setup_requirements']],
+                                 run_requirements=[dict(r, candidate_ids=['m2']) if r['kind'] == 'machine' else r
+                                                   for r in data['phases'][1]['run_requirements']])
+        c = load_setup_contract(json.dumps(data))
+        from planning_factory.domain.models import Resource
+        s = scenario([op('a'), op('b', resource='m2', predecessors=(Dep('a', 'FS'),),
+                          release=dt(day=21, hour=8), due=dt(day=23, hour=17))],
+                     resources=(Resource('m', 'work', kind='machine'), Resource('m2', 'work', kind='machine'),
+                                Resource('op', 'work', kind='operator'), Resource('tool', 'work', kind='tool')))
+        seq = ('job:a', 'job:b')
+        result = just_in_time_tail(s, c, seq)
+        self.assertIn('job:a', [p for p, _ in result.delayed])
+        runs = {b.phase_id: b for b in result.solution.bookings if b.stage == 'run'}
+        self.assertLessEqual(runs['job:a'].segments[-1].end, runs['job:b'].segments[0].start)
+        self.assertEqual(result.selected.late_orders, 0)
+        self.assertEqual(audit_stage_capacity(c, result.scenario, seq, result.solution.bookings), ())
