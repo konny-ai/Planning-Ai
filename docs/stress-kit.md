@@ -51,5 +51,6 @@ Misura, su scenari sintetici con seme fisso, il tempo di un piano a stadi, di un
 ricerca di sequenza da 10 valutazioni e (con `--backward`) della politica backward
 (ADR 005, opzione A). I tempi dipendono dalla macchina: confrontare esecuzioni sulla
 stessa. Misure di riferimento di questa implementazione (stessa macchina, un solo giro): 80 fasi,
-piano 0,06 s e backward 6,8 s; 160 fasi, 0,11 s e 18,6 s; 320 fasi, 0,25 s e 96,9 s. Prima
-delle ottimizzazioni il backward richiedeva 26 s a 80 fasi e 123 s a 160; a 320 superava i 400 s.
+piano 0,05 s e backward 6,3 s; 160 fasi, backward 13,6 s; 320 fasi, piano 0,12 s e backward
+50 s. Prima delle ottimizzazioni il backward richiedeva 26 s a 80 fasi e 123 s a 160; a 320
+superava i 400 s.

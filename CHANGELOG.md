@@ -14,6 +14,16 @@ esatta con piano completo su 250 scenari casuali, su 150 scenari a stadi e sui c
 completate e inizi fissi; stesso hash delle prenotazioni sulle misure: 80 fasi 11,4 s -> 8,9 s,
 160 fasi 32,3 s -> 22,6 s. Il resto del tempo e' nel calcolo degli intervalli liberi.
 
+## Non rilasciato — tempi liberi aggiornati in modo incrementale
+
+`bundle_free` con cache non ricalcola piu' da zero i tempi liberi di una risorsa a ogni nuova
+prenotazione: tiene il profilo di carico (aggiornato per prenotazione) e sottrae dai tempi liberi
+memorizzati solo le zone che le nuove prenotazioni saturano (`free_intervals` resta la definizione
+di riferimento). Provata l'uguaglianza esatta passo per passo su 400 sequenze casuali di
+prenotazioni (capacita' 1, 2, 3, 10.000, risorse a capacita' infinita; oltre 20.000 confronti con il
+calcolo da zero). Stesso hash delle prenotazioni su tutte le misure; backward: 80 fasi 6,8 s -> 5,7 s,
+160 fasi 18,6 s -> 13,6 s, 320 fasi 97 s -> 50 s.
+
 ## Non rilasciato — fuzz esteso del percorso a stadi
 
 `tests/test_setup_stage_fuzz_extended.py`: scenari casuali a seme fisso su prenotazioni congelate
