@@ -128,6 +128,37 @@ class IncrementalPlanTests(unittest.TestCase):
         moved = with_release(s, 'n1', dt(day=22, hour=10))
         self.assertEqual(plan(moved, resume=dict(trace, changed=frozenset({'nest:nest'}))), plan(moved))
 
+    def test_resume_is_refused_when_both_plans_have_backward_tasks(self):
+        # Mutation testing showed no test covered this guard: with backward tasks in BOTH scenarios the
+        # tasks are equal bar the release, so only the mode check stops a (wrong) reuse.
+        ops = [Operation(f'p{i}', f'o{i}', 3600, (alt('m'),), due=dt(day=25 + i, hour=17), mode='backward')
+               for i in range(4)]
+        s = scenario(ops)
+        trace = {}
+        plan(s, trace=trace)
+        self.assertIn('order', trace)
+        moved = with_release(s, 'p3', dt(day=22))
+        tasks, edges, _ = compile_tasks(moved)
+        resume = dict(trace, changed=frozenset({'job:p3'}))
+        self.assertEqual(_reusable(moved, tasks, edges, False, resume), {})
+        self.assertEqual(plan(moved, resume=resume), plan(moved))
+
+    def test_resume_is_refused_when_the_previous_plan_left_work_unscheduled(self):
+        # An operation that cannot fit the horizon: the previous plan has unscheduled work, so the
+        # (conservative) guard must refuse the reuse, and the plan must still equal the full one.
+        ops = [Operation('big', 'o0', 400 * 3600, (alt('m'),), due=dt(day=21, hour=17)),
+               Operation('a', 'o1', 3600, (alt('n'),), due=dt(day=22, hour=17)),
+               Operation('b', 'o2', 3600, (alt('n'),), due=dt(day=23, hour=17))]
+        s = scenario(ops, resources=(Resource('m', 'work'), Resource('n', 'work')), end=dt(day=24, hour=0))
+        trace = {}
+        base = plan(s, trace=trace)
+        self.assertTrue(base.unscheduled)
+        moved = with_release(s, 'b', dt(day=21))
+        tasks, edges, _ = compile_tasks(moved)
+        resume = dict(trace, changed=frozenset({'job:b'}))
+        self.assertEqual(_reusable(moved, tasks, edges, False, resume), {})
+        self.assertEqual(plan(moved, resume=resume), plan(moved))
+
     def test_other_policies_and_backward_tasks_never_resume(self):
         s = scenario([Operation(f'p{i}', f'o{i}', 3600, (alt('m'),), due=dt(day=25, hour=17))
                       for i in range(4)])

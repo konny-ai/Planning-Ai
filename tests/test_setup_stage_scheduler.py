@@ -315,6 +315,22 @@ class SupplierMilestoneTests(unittest.TestCase):
         errors = audit_stage_capacity(c, s, ('job:a',), early)
         self.assertTrue(any('supplier milestone' in e for e in errors))
 
+    def test_ss_between_two_milestones_is_ignored_while_ss_into_machine_work_still_fails(self):
+        # Mutation testing showed no test covered a milestone-to-milestone edge: it orders nothing on
+        # machines, so it must not trigger the "SS from supplier" refusal that guards real work.
+        from planning_factory.domain.models import Operation
+        sup1 = Operation('sup1', 'order', 0, (), external_end=dt(day=20, hour=9))
+        sup2 = Operation('sup2', 'order', 0, (), external_end=dt(day=21, hour=9),
+                         predecessors=(Dependency('sup1', 'SS', 3600),))
+        s = base([sup1, sup2, op('a', predecessors=(Dependency('sup2', 'FS', 3600),))])
+        result = schedule_setup_stages(s, self._contract(), ('job:a',))
+        run = next(b for b in result.bookings if b.stage == 'run')
+        self.assertGreaterEqual(run.segments[0].start, dt(day=21, hour=10))      # the FS floor of sup2 + lag
+        self.assertEqual(audit_stage_capacity(self._contract(), s, ('job:a',), result.bookings), ())
+        refused = base([sup1, op('a', predecessors=(Dependency('sup1', 'SS'),))])
+        with self.assertRaisesRegex(ValidationError, 'SS from supplier'):
+            schedule_setup_stages(refused, self._contract(), ('job:a',))
+
     def test_ss_from_supplier_fails_closed(self):
         with self.assertRaisesRegex(ValidationError, 'SS from supplier'):
             schedule_setup_stages(self._s(kind='SS'), self._contract(), ('job:a',))

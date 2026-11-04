@@ -24,6 +24,19 @@ l'eviction non puo' piu' fallire con una chiave gia' rimossa. Non applicati: div
 `setup_sequence_search.py` (819 righe) e l'handler `setup-stages` della CLI (~215 righe): sono
 refactoring ampi senza cambiamento di comportamento.
 
+## Non rilasciato — test di mutazione del codice più delicato
+
+Modificando una condizione per volta (confronti, `and`/`or`, `min`/`max`, segni, `True`/`False`) nei moduli di
+riuso incrementale, tempi liberi, sottrazione degli intervalli, vincoli minimi di avvio, piano parziale e
+ricerca di sequenza, ho cercato le modifiche che nessun test rilevava. Trovate e coperte: il riuso va rifiutato
+con attivita' backward in entrambi gli scenari e con lavoro non collocato; un arco tra due traguardi fornitore
+con precedenza inizio->inizio va ignorato; la chiusura del piano parziale si propaga per piu' livelli e
+attraverso un nesting; sequenza o contratto incompleti vanno rifiutati; a parita' di punteggio `best` conserva
+l'ordine per scadenza; il ritardo delle lavorazioni non va in crash con un successore fornitore, misura le
+precedenze inizio->inizio dall'inizio, non riporta spostamenti di 0 secondi e non tenta le lavorazioni
+congelate. I mutanti rimasti sono testo di docstring, equivalenti (`<` -> `<=` che assegna lo stesso valore) o
+pura ottimizzazione (i limiti che non cambiano il risultato). Il codice del repo non e' cambiato.
+
 ## Non rilasciato — fuzzing dello scenario JSON
 
 Stesso metodo sullo scenario passato a `setup-stages` (2.055 mutazioni di campo): nessuna eccezione

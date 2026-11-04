@@ -182,6 +182,17 @@ class StateGroupedStartTests(unittest.TestCase):
         self.assertEqual(best_start_sequence(s, three(), objective='setup'),
                          ('job:b', 'job:a', 'job:c'))
 
+    def test_best_start_keeps_the_due_date_order_on_a_tie(self):
+        # The documented tie rule ("ties keep the due-date order") had no test: a mutation to <= went unnoticed.
+        from unittest import mock
+        from planning_factory.engine import setup_sequence_search as module
+        s, c = base([op('a'), op('b'), op('c')]), three()
+        edd = default_machine_sequence(s)
+        self.assertNotEqual(state_grouped_sequence(s, c, edd), edd)        # the two starts really differ
+        with mock.patch.object(module, '_score', lambda metrics, objective: (0,)):
+            self.assertEqual(best_start_sequence(s, c, objective='setup'), edd)
+        self.assertNotEqual(best_start_sequence(s, c, objective='setup'), edd)   # without the tie, grouped wins
+
     def test_best_start_requires_explicit_objective(self):
         with self.assertRaises(ValueError):
             best_start_sequence(base([op('a'), op('b'), op('c')]), three(), objective='x')
@@ -485,3 +496,92 @@ class PinnedRunTests(unittest.TestCase):
         self.assertEqual(result.rejected, ())
         pinned = next(b for b in result.solution.bookings if b.phase_id == 'job:b' and b.stage == 'run')
         self.assertEqual(pinned.segments[0].start, dt(day=20, hour=9))
+
+
+class DelayRoomSemanticsTests(unittest.TestCase):
+    """Found by mutation testing of just_in_time_tail / backward_setup_before_run: nothing pinned these."""
+
+    def _two_machine_contract(self):
+        data = spec()
+        data['resources'].append({'id': 'm2', 'kind': 'machine'})
+        data['initial_machine_states']['m2'] = 'RED'
+        data['phases'][1] = dict(
+            data['phases'][1], machine_id='m2',
+            setup_requirements=[dict(r, candidate_ids=['m2']) if r['kind'] == 'machine' else r
+                                for r in data['phases'][1]['setup_requirements']],
+            run_requirements=[dict(r, candidate_ids=['m2']) if r['kind'] == 'machine' else r
+                              for r in data['phases'][1]['run_requirements']])
+        return load_setup_contract(json.dumps(data))
+
+    def _resources(self):
+        from planning_factory.domain.models import Resource
+        return (Resource('m', 'work', kind='machine'), Resource('m2', 'work', kind='machine'),
+                Resource('op', 'work', kind='operator'), Resource('tool', 'work', kind='tool'))
+
+    def test_ss_successor_bounds_the_delay_from_the_start_of_the_predecessor(self):
+        from planning_factory.engine.setup_sequence_search import just_in_time_tail
+        s = scenario([op('a', due=dt(day=28)),
+                      op('b', resource='m2', release=dt(day=20, hour=8), due=dt(day=28),
+                         predecessors=(Dependency('a', 'SS', 0),))],
+                     resources=self._resources(), end=dt(month=11, day=15, hour=0))
+        result = just_in_time_tail(s, self._two_machine_contract(), ('job:a', 'job:b'))
+        runs = {b.phase_id: b for b in result.solution.bookings if b.stage == 'run'}
+        # SS: a may start as late as b starts, not merely end before b starts.
+        self.assertEqual(runs['job:a'].segments[0].start, runs['job:b'].segments[0].start)
+        self.assertEqual(result.rejected, ())
+
+    def test_supplier_milestone_after_machine_work_does_not_break_the_delay(self):
+        from planning_factory.domain.models import Operation
+        from planning_factory.engine.setup_sequence_search import backward_setup_before_run
+        sup = Operation('sup', 'order', 0, (), external_end=dt(day=26, hour=9),
+                        predecessors=(Dependency('a', 'FS'),))
+        s = base([op('a', due=dt(day=23, hour=17)), op('b', due=dt(day=23, hour=17)), sup])
+        c = load_setup_contract(json.dumps(spec()))
+        result = backward_setup_before_run(s, c, ('job:a', 'job:b'))      # must not raise
+        self.assertTrue(result.delayed_runs)
+        self.assertEqual(audit_stage_capacity(c, result.scenario, ('job:a', 'job:b'),
+                                              result.solution.bookings), ())
+
+    def test_frozen_runs_are_never_attempted_so_never_rejected(self):
+        from planning_factory.domain.models import Interval
+        from planning_factory.engine.setup_capacity import StageAllocation, StageBooking
+        from planning_factory.engine.setup_sequence_search import just_in_time_tail
+        frozen = (StageBooking('job:a', 'setup', (Interval(dt(hour=8), dt(hour=8, minute=30)),),
+                               (StageAllocation('m', 10000), StageAllocation('op', 5000),
+                                StageAllocation('tool', 10000))),
+                  StageBooking('job:a', 'run', (Interval(dt(hour=8, minute=30), dt(hour=9, minute=30)),),
+                               (StageAllocation('m', 10000), StageAllocation('op', 2500))))
+        s = base([op('a', due=dt(day=23, hour=17)), op('b', due=dt(day=23, hour=17))])
+        result = just_in_time_tail(s, load_setup_contract(json.dumps(spec())), ('job:a', 'job:b'),
+                                   frozen_bookings=frozen)
+        self.assertEqual(result.rejected, ())
+        self.assertNotIn('job:a', [p for p, _ in result.delayed])
+        kept = {(b.phase_id, b.stage): b for b in result.solution.bookings}
+        for record in frozen:
+            self.assertEqual(kept[(record.phase_id, record.stage)], record)
+
+    def test_a_frozen_run_alone_is_never_attempted_so_never_rejected(self):
+        # Mutation testing: with its setup frozen too the phase was excluded for another reason, so the
+        # frozen-run filter itself went untested.
+        from planning_factory.domain.models import Interval
+        from planning_factory.engine.setup_capacity import StageAllocation, StageBooking
+        from planning_factory.engine.setup_sequence_search import just_in_time_tail
+        frozen = (StageBooking('job:a', 'run', (Interval(dt(hour=8, minute=30), dt(hour=9, minute=30)),),
+                               (StageAllocation('m', 10000), StageAllocation('op', 2500))),)
+        s = base([op('a', due=dt(day=23, hour=17)), op('b', due=dt(day=23, hour=17))])
+        result = just_in_time_tail(s, load_setup_contract(json.dumps(spec())), ('job:a', 'job:b'),
+                                   frozen_bookings=frozen)
+        self.assertEqual(result.rejected, ())
+        self.assertNotIn('job:a', [p for p, _ in result.delayed])
+        kept = {(b.phase_id, b.stage): b for b in result.solution.bookings}
+        self.assertEqual(kept[('job:a', 'run')], frozen[0])
+
+    def test_nothing_is_reported_as_delayed_or_tightened_by_zero(self):
+        from planning_factory.engine.setup_sequence_search import backward_setup_before_run
+        s = base([op(n, due=dt(day=23, hour=17)) for n in 'abc'])
+        result = backward_setup_before_run(s, three(), ('job:a', 'job:b', 'job:c'))
+        self.assertTrue(all(seconds > 0 for _, seconds in result.delayed_runs), result.delayed_runs)
+        forward = {(b.phase_id, b.stage): b for b in schedule_setup_stages(
+            s, three(), ('job:a', 'job:b', 'job:c')).bookings}
+        for pid, release in result.setup_releases:       # a derived release exists only for a real move
+            self.assertGreater(release, forward[(pid, 'setup')].segments[0].start)

@@ -53,6 +53,38 @@ class PartialPlanningTests(unittest.TestCase):
                          {'x': NO_CANDIDATE, 'm': NEST_MEMBER_UNPLANNED})
         self.assertEqual({b.phase_id for b in result.staged.bookings}, {'job:a'})
 
+    def _full_ids_contract(self, *ids):
+        data = spec()
+        data['phases'] = [dict(data['phases'][0], id=i) for i in ids]
+        return load_setup_contract(json.dumps(data))
+
+    def test_closure_follows_chains_of_any_depth_and_cascades_through_nestings(self):
+        # Mutation testing showed the closure loop was only exercised one level deep: stopping after a
+        # single pass went unnoticed. A chain x -> y -> z, and x -> y(nest member) -> w(shares the nest)
+        # -> v, both need several passes.
+        chain = base([Operation('x', 'order', 3600, ()), op('y', predecessors=(Dependency('x', 'FS'),)),
+                      op('z', predecessors=(Dependency('y', 'FS'),)), op('b')])
+        got = plan_setup_stages_partial(chain, self._full_ids_contract('job:b'), ('job:b',))
+        self.assertEqual({u.operation_id: u.code for u in got.unplanned},
+                         {'x': NO_CANDIDATE, 'y': PREDECESSOR_UNPLANNED, 'z': PREDECESSOR_UNPLANNED})
+        nested = base([Operation('x', 'order', 3600, ()), op('y', predecessors=(Dependency('x', 'FS'),)),
+                       op('w'), op('v', predecessors=(Dependency('w', 'FS'),)), op('free')],
+                      nestings=(Nesting('n', ('y', 'w'), 3600),))
+        got = plan_setup_stages_partial(nested, self._full_ids_contract('job:free'), ('job:free',))
+        self.assertEqual({u.operation_id: u.code for u in got.unplanned},
+                         {'x': NO_CANDIDATE, 'y': PREDECESSOR_UNPLANNED, 'w': NEST_MEMBER_UNPLANNED,
+                          'v': PREDECESSOR_UNPLANNED})
+        self.assertEqual({b.phase_id for b in got.staged.bookings}, {'job:free'})
+
+    def test_incomplete_contract_or_sequence_is_refused(self):
+        # Mutation testing showed nothing covered the final consistency check.
+        s = base([op('a'), op('b')])
+        with self.assertRaisesRegex(ValidationError, 'canonical phase and a place'):
+            plan_setup_stages_partial(s, contract('a', 'b'), ('job:a',))               # sequence misses b
+        with self.assertRaisesRegex(ValidationError, 'canonical phase and a place'):
+            plan_setup_stages_partial(s, contract('a'), ('job:a', 'job:b'))            # contract misses b
+        self.assertEqual(plan_setup_stages_partial(s, contract('a', 'b'), ('job:a', 'job:b')).unplanned, ())
+
     def test_extra_operations_and_nothing_plannable(self):
         s = base([op('a'), op('b')])
         result = plan_setup_stages_partial(s, contract('a', 'b'), ('job:a', 'job:b'),
