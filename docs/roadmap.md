@@ -112,6 +112,8 @@ Il confronto `integrations/factory-export/tools/compare_bench.py` può ora emett
   con turni, nesting indivisibili e anti-doppio conteggio (PR #62).
 - [x] Scheduler opt-in tecnico di due fasi, capacità percentuale finita e
   sequenza macchina fornita, con verifiche indipendenti (PR #63).
+- [x] Sequenza macchina iniziale automatica (EDD con precedenze) e mosse di
+  reinserimento nella ricerca di sequenza, sempre auditate.
 - [ ] Rendere completo lo scheduler setup/run: sequenza macchina ottimizzata,
   congelamenti/consuntivi, tutti i vincoli di dominio e adapter ERP.
   Il piano di stage e' tecnico e non pubblicabile in Factory (#53).

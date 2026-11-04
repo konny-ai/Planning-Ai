@@ -4,6 +4,7 @@ Never assumes unapproved business weights: caller selects the objective.
 All candidates are independently audited by the two-stage planner; no
 production database, GUI, or legacy equivalence is involved.
 """
+import heapq
 from dataclasses import dataclass
 from datetime import UTC
 from planning_factory.domain.models import Scenario
@@ -79,20 +80,74 @@ def _score(m: SequenceMetrics, objective: str):
     raise ValueError('objective must be explicitly chosen: delivery, setup or flow')
 
 
-def _neighbours(sequence, machine_by_task):
-    """Swap adjacent jobs on each machine, including noncontiguous global positions."""
+def default_machine_sequence(s: Scenario) -> tuple[str, ...]:
+    """Deterministic starting order: earliest due date first, precedence-safe.
+
+    Kahn topological order over the compiled task graph; among ready tasks the
+    key is (has no due, due, release, priority, id). It is a neutral, explicit
+    heuristic that invents no business weights; the caller may still pass any
+    other sequence. Feasibility is still decided by the staged scheduler audit.
+    """
+    tasks, edges, _ = compile_tasks(s)
+    remaining = {tid: 0 for tid in tasks}
+    successors = {tid: [] for tid in tasks}
+    for edge in edges:
+        remaining[edge.successor] += 1
+        successors[edge.predecessor].append(edge.successor)
+
+    def key(tid):
+        t = tasks[tid]
+        return (t.due is None, t.due.timestamp() if t.due is not None else 0,
+                t.release.timestamp() if t.release is not None else 0,
+                t.priority, tid)
+
+    ready = [(key(tid), tid) for tid, n in remaining.items() if n == 0]
+    heapq.heapify(ready)
+    order = []
+    while ready:
+        _, tid = heapq.heappop(ready)
+        order.append(tid)
+        for nxt in successors[tid]:
+            remaining[nxt] -= 1
+            if remaining[nxt] == 0:
+                heapq.heappush(ready, (key(nxt), nxt))
+    if len(order) != len(tasks):
+        raise ValidationError(['precedence cycle among compiled tasks'])
+    return tuple(order)
+
+
+def _neighbours(sequence, machine_by_task, neighbourhood='swap'):
+    """Moves on each machine, including noncontiguous global positions.
+
+    'swap' exchanges adjacent jobs; 'insertion' additionally relocates a job
+    to any non-adjacent position on the same machine.
+    """
     for mid in sorted(set(machine_by_task.values())):
         positions = [i for i, tid in enumerate(sequence) if machine_by_task[tid] == mid]
         for a, b in zip(positions, positions[1:]):
             candidate = list(sequence)
             candidate[a], candidate[b] = candidate[b], candidate[a]
             yield tuple(candidate)
+        if neighbourhood != 'insertion':
+            continue
+        jobs = [sequence[i] for i in positions]
+        for i in range(len(jobs)):
+            for j in range(len(jobs)):
+                if abs(i - j) < 2:
+                    continue
+                moved = list(jobs)
+                moved.insert(j, moved.pop(i))
+                candidate = list(sequence)
+                for pos, tid in zip(positions, moved):
+                    candidate[pos] = tid
+                yield tuple(candidate)
 
 
 def optimize_setup_sequence(s: Scenario, contract: SetupContract,
-                            initial_sequence: tuple[str, ...], *,
+                            initial_sequence: tuple[str, ...] | None = None, *,
                             objective: str, max_evaluations: int = 24,
-                            max_alternatives: int = 32) -> SequenceSearch:
+                            max_alternatives: int = 32,
+                            neighbourhood: str = 'swap') -> SequenceSearch:
     """Bounded best-improvement search; no claim of global mathematical optimum.
 
     The initial sequence must be feasible. Every candidate is independently
@@ -100,6 +155,10 @@ def optimize_setup_sequence(s: Scenario, contract: SetupContract,
     Reports both baseline and selected KPIs, preserving baseline on ties.
     """
     _score(SequenceMetrics(0, 0, 0, 0), objective)
+    if neighbourhood not in ('swap', 'insertion'):
+        raise ValueError("neighbourhood must be 'swap' or 'insertion'")
+    if initial_sequence is None:
+        initial_sequence = default_machine_sequence(s)
     if type(max_evaluations) is not int or not 1 <= max_evaluations <= 256:
         raise ValueError('max_evaluations must be integer 1..256')
     tasks, _, _ = compile_tasks(s)
@@ -119,7 +178,7 @@ def optimize_setup_sequence(s: Scenario, contract: SetupContract,
     # Explore neighbours of the current best, but never repeat rejected cases.
     while evaluated < max_evaluations:
         improved = False
-        for candidate in _neighbours(current, machine_by_task):
+        for candidate in _neighbours(current, machine_by_task, neighbourhood):
             if evaluated >= max_evaluations:
                 break
             if candidate in seen:

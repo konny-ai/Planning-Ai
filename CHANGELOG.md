@@ -1,5 +1,16 @@
 # Changelog
 
+## Non rilasciato — sequenza macchina automatica per lo scheduler setup/run
+
+`optimize_setup_sequence` accetta ora `initial_sequence=None`: la sequenza di
+partenza è `default_machine_sequence`, un ordine deterministico per scadenza
+(EDD) che rispetta le precedenze, senza pesi di business inventati. Nuovo
+parametro `neighbourhood='insertion'` (default `'swap'`, invariato) che aggiunge
+il reinserimento di una fase in posizioni non adiacenti della stessa macchina.
+Ogni candidato resta verificato dallo scheduler a due stadi e dall'audit
+indipendente; nessuna garanzia di ottimalità globale. Test in
+`tests/test_setup_sequence_search.py`.
+
 ## Non rilasciato — assistente conversazionale (ramo feat/cliente-assistente-chat-v2)
 
 Pannello **Assistente** in ogni vista della Control Room, con conversazione,

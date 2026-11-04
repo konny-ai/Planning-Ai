@@ -6,7 +6,7 @@ from planning_factory.domain.validation import ValidationError
 from planning_factory.domain.setup_contract import load_setup_contract
 from planning_factory.engine.setup_stage_scheduler import schedule_setup_stages
 from planning_factory.engine.setup_sequence_search import (
-    optimize_setup_sequence, sequence_metrics,
+    default_machine_sequence, optimize_setup_sequence, sequence_metrics,
 )
 from planning_factory.engine.setup_capacity import audit_stage_capacity
 from planning_factory.engine.verification import verify_plan
@@ -119,3 +119,33 @@ class SetupSequenceSearchTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class DefaultSequenceAndInsertionTests(unittest.TestCase):
+    def test_default_sequence_is_edd_and_precedence_safe(self):
+        s = base([op('a', due=dt(day=29)), op('b', due=dt(day=22)),
+                  op('c', due=dt(day=21), predecessors=(Dependency('a', 'FS'),))])
+        self.assertEqual(default_machine_sequence(s), ('job:b', 'job:a', 'job:c'))
+        self.assertEqual(default_machine_sequence(s), default_machine_sequence(s))
+
+    def test_search_without_initial_sequence_uses_default(self):
+        s = base([op('a'), op('b'), op('c')])
+        auto = optimize_setup_sequence(s, three(), objective='setup', max_evaluations=12)
+        self.assertEqual(len(auto.sequence), 3)
+        self.assertEqual(verify_plan(auto.winner.scenario, auto.winner.plan), ())
+        self.assertLessEqual(auto.selected.setup_seconds, auto.baseline.setup_seconds)
+
+    def test_insertion_neighbourhood_reaches_nonadjacent_moves(self):
+        from planning_factory.engine.setup_sequence_search import _neighbours
+        seq = ('x', 'y', 'z')
+        m = {t: 'm' for t in seq}
+        swaps = set(_neighbours(seq, m))
+        ins = set(_neighbours(seq, m, 'insertion'))
+        self.assertTrue(swaps < ins)
+        self.assertIn(('y', 'z', 'x'), ins)
+        self.assertIn(('z', 'x', 'y'), ins)
+
+    def test_rejects_unknown_neighbourhood(self):
+        s = base([op('a'), op('b'), op('c')])
+        with self.assertRaises(ValueError):
+            optimize_setup_sequence(s, three(), objective='setup', neighbourhood='x')
