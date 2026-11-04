@@ -24,6 +24,14 @@ l'eviction non puo' piu' fallire con una chiave gia' rimossa. Non applicati: div
 `setup_sequence_search.py` (819 righe) e l'handler `setup-stages` della CLI (~215 righe): sono
 refactoring ampi senza cambiamento di comportamento.
 
+## Non rilasciato — correzioni dalla terza revisione (ricerca di sequenza)
+
+(1) `default_machine_sequence` andava in `KeyError` con due traguardi fornitore concatenati elencati
+dal successore: il grafo e' ora costruito solo sulle attivita' pianificate. (2) `sequence_metrics`
+dava un makespan negativo se tutto era completato prima dell'inizio dell'orizzonte (e il report
+violava il proprio schema): ora e' almeno 0. (3) Il ritardo delle lavorazioni non tenta piu' di
+spostare quelle con inizio fisso, che comparivano tra le "rifiutate". Ognuna con un test.
+
 ## Non rilasciato — lag da predecessori completati (correzione)
 
 Nel piano a stadi l'arco da un predecessore gia' completato veniva scartato **insieme al suo lag**: il

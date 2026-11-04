@@ -426,3 +426,62 @@ class BackwardMultiStartTests(unittest.TestCase):
             kwargs = {'objective': 'setup', 'restarts': 1, **bad}
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 optimize_backward_sequence_multistart(s, c, **kwargs)
+
+
+class SupplierChainSequenceTests(unittest.TestCase):
+    """Found by the third code-review pass: chained supplier milestones raised KeyError."""
+
+    def _ext(self, name, day, preds=()):
+        from planning_factory.domain.models import Operation
+        return Operation(name, 'order', 0, (), external_end=dt(day=day), predecessors=preds)
+
+    def test_chained_milestones_in_either_listing_order(self):
+        for order in ('successor-first', 'predecessor-first'):
+            sup1 = self._ext('sup1', 20)
+            sup2 = self._ext('sup2', 21, (Dependency('sup1', 'FS'),))
+            ops = [sup2, sup1] if order == 'successor-first' else [sup1, sup2]
+            s = base(ops + [op('a', predecessors=(Dependency('sup2', 'FS'),)), op('b')])
+            with self.subTest(order=order):
+                self.assertEqual(default_machine_sequence(s), ('job:a', 'job:b'))
+
+    def test_milestones_do_not_reorder_machine_work(self):
+        s = base([self._ext('sup', 22), op('a', due=dt(day=28)), op('b', due=dt(day=26),
+                                                                    predecessors=(Dependency('sup', 'FS'),)),
+                  op('c', due=dt(day=27), predecessors=(Dependency('a', 'FS'),))])
+        self.assertEqual(default_machine_sequence(s), ('job:b', 'job:a', 'job:c'))
+
+
+class MakespanEdgeTests(unittest.TestCase):
+    """Found by the third code-review pass: completion before the horizon gave a negative makespan."""
+
+    def test_all_completed_before_the_horizon_has_zero_makespan(self):
+        data = spec()
+        data['phases'] = [dict(data['phases'][0], id='job:a'), dict(data['phases'][1], id='job:b')]
+        c = load_setup_contract(json.dumps(data))
+        s = base([op('a', hours=0, completed_at=dt(day=18)), op('b', hours=0, completed_at=dt(day=18))])
+        metrics = sequence_metrics(s, schedule_setup_stages(s, c, ('job:a', 'job:b')))
+        self.assertEqual(metrics.makespan_seconds, 0)
+        self.assertEqual((metrics.late_orders, metrics.tardiness_seconds, metrics.setup_seconds), (0, 0, 0))
+
+    def test_active_work_still_measures_from_the_horizon_start(self):
+        s = base([op('a'), op('b')])
+        data = spec()
+        data['phases'] = [dict(data['phases'][0], id='job:a'), dict(data['phases'][1], id='job:b')]
+        c = load_setup_contract(json.dumps(data))
+        metrics = sequence_metrics(s, schedule_setup_stages(s, c, ('job:a', 'job:b')))
+        self.assertGreater(metrics.makespan_seconds, 0)
+
+
+class PinnedRunTests(unittest.TestCase):
+    def test_fixed_start_runs_are_neither_delayed_nor_reported_as_rejected(self):
+        from planning_factory.engine.setup_sequence_search import just_in_time_tail
+        data = spec()
+        data['phases'] = [dict(data['phases'][0], id='job:a'), dict(data['phases'][1], id='job:b')]
+        c = load_setup_contract(json.dumps(data))
+        s = base([op('a', due=dt(day=23, hour=17)),
+                  op('b', due=dt(day=23, hour=17), fixed_start=dt(day=20, hour=9))])
+        result = just_in_time_tail(s, c, ('job:a', 'job:b'))
+        self.assertEqual([p for p, _ in result.delayed], ['job:a'])
+        self.assertEqual(result.rejected, ())
+        pinned = next(b for b in result.solution.bookings if b.phase_id == 'job:b' and b.stage == 'run')
+        self.assertEqual(pinned.segments[0].start, dt(day=20, hour=9))

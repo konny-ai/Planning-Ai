@@ -82,7 +82,8 @@ def sequence_metrics(s: Scenario, solution: StagedSetupResult) -> SequenceMetric
              for order, end in ends.items() if order in due]
     setups = sum(sum(i.seconds for i in b.segments)
                  for b in solution.bookings if b.stage == 'setup')
-    makespan = (int((max(ends.values()) - s.start.astimezone(UTC)).total_seconds())
+    # Work completed before the horizon leaves nothing to schedule: never a negative makespan.
+    makespan = (max(0, int((max(ends.values()) - s.start.astimezone(UTC)).total_seconds()))
                 if ends else 0)
     return SequenceMetrics(sum(x > 0 for x in tardy), sum(tardy), setups, makespan)
 
@@ -106,11 +107,16 @@ def default_machine_sequence(s: Scenario) -> tuple[str, ...]:
     other sequence. Feasibility is still decided by the staged scheduler audit.
     """
     tasks, edges, _ = compile_tasks(s)
-    remaining = {tid: 0 for tid in tasks}
-    successors = {tid: [] for tid in tasks}
+    # Supplier milestones are not machine work: they only gate successors, so the graph is built
+    # over planned tasks alone (an edge with a milestone at either end adds no ordering here, and
+    # a chain of milestones can no longer hit an already removed node).
+    planned = {tid for tid, task in tasks.items() if task.external_end is None}
+    remaining = {tid: 0 for tid in tasks if tid in planned}
+    successors = {tid: [] for tid in remaining}
     for edge in edges:
-        remaining[edge.successor] += 1
-        successors[edge.predecessor].append(edge.successor)
+        if edge.predecessor in planned and edge.successor in planned:
+            remaining[edge.successor] += 1
+            successors[edge.predecessor].append(edge.successor)
 
     def key(tid):
         t = tasks[tid]
@@ -118,11 +124,6 @@ def default_machine_sequence(s: Scenario) -> tuple[str, ...]:
                 t.release.timestamp() if t.release is not None else 0,
                 t.priority, tid)
 
-    # Supplier milestones are not machine work: they only gate successors.
-    for tid in [x for x, task in tasks.items() if task.external_end is not None]:
-        for nxt in successors[tid]:
-            remaining[nxt] -= 1
-        del remaining[tid]
     ready = [(key(tid), tid) for tid, n in remaining.items() if n == 0]
     heapq.heapify(ready)
     order = []
@@ -350,8 +351,8 @@ def just_in_time_tail(s: Scenario, contract: SetupContract,
 
     for pid in reversed(active):
         task = tasks[pid]
-        if pid in frozen_runs:
-            continue  # a frozen run is never moved
+        if pid in frozen_runs or task.fixed_start is not None:
+            continue  # a frozen or fixed-start run is never moved (and is not a rejection)
         if only is not None and pid not in only:
             continue  # this task did not ask for backward placement
         run, limit = room(pid)
