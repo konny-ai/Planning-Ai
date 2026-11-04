@@ -212,3 +212,21 @@ Il file accetta due campi opzionali:
 diverso da quelli elencati (ad esempio `flow`), viene rifiutato. Senza i campi il
 comportamento e' quello di prima. La sequenza effettivamente usata e' in
 `MaterialStagedPlan.machine_sequence`.
+
+
+## Da riga di comando: `staged-plan`
+
+```sh
+planning-factory staged-plan scenario.json stage-spec.json -o piano.json \
+  --html piano.html --scenario-output scenario-finale.json
+```
+
+Esegue gli stessi passi dell'anteprima web: allocazione e audit dei materiali, setup e
+lavorazione a stadi e, se la specifica lo chiede (`backward`, `sequence_objective`), l'opzione A
+dell'ADR 005. La specifica deve nominare il digest esatto dello scenario: una specifica
+non coerente viene rifiutata. Il comando e' fail-closed: una carenza di materiale, una
+violazione dell'audit o un'uscita che sovrascriverebbe un ingresso fermano il calcolo con un
+errore e senza scrivere il report. Il report contiene `materials` (assegnazioni e carenze),
+sequenza, prenotazioni, KPI, eventuale `backward` con i gap e `audit_violations`; il piano non
+e' mai pubblicabile su ERP (`erp_publishable: false`). Con `--scenario-output` si salva lo
+scenario dopo i vincoli dei materiali e gli eventuali rilasci backward.

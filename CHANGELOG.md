@@ -14,6 +14,14 @@ esatta con piano completo su 250 scenari casuali, su 150 scenari a stadi e sui c
 completate e inizi fissi; stesso hash delle prenotazioni sulle misure: 80 fasi 11,4 s -> 8,9 s,
 160 fasi 32,3 s -> 22,6 s. Il resto del tempo e' nel calcolo degli intervalli liberi.
 
+## Non rilasciato — comando `staged-plan` (materiali + stadi da riga di comando)
+
+`planning-factory staged-plan scenario.json spec.json -o piano.json [--html] [--scenario-output]`
+esegue la pipeline materiali + setup/run (+ backward e ricerca di sequenza se la specifica v0.3
+li chiede) da file, con report JSON (materiali, sequenza, prenotazioni, KPI, gap, audit) e
+HTML offline. Fail-closed: carenza di materiale, digest non coerente, audit o sovrascrittura
+degli ingressi fermano il calcolo senza scrivere il report; mai pubblicabile su ERP.
+
 ## Non rilasciato — ottimizzazioni esatte del motore
 
 (1) `subtract` degli intervalli lavora sui tagli invece che su ogni intervallo (provato uguale alla

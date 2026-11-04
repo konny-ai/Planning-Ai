@@ -126,6 +126,12 @@ def main(argv=None) -> int:
     stages.add_argument('--seed', type=int, default=0, help='Seed of the perturbed starts')
     stages.add_argument('--budget', type=int, default=24, help='Sequence evaluations, 1..256')
     stages.add_argument('--max-alternatives', type=int, default=32)
+    staged = sub.add_parser('staged-plan', help='Material gates + setup/run stages (+ optional backward) from a v0.3 JSON spec')
+    staged.add_argument('scenario', help='Scenario JSON; the spec must name its exact SHA-256 digest')
+    staged.add_argument('spec', help='v0.3 staged specification JSON (docs/v03-staged-file-preview.md)')
+    staged.add_argument('-o', '--output', required=True, help='Report JSON: materials, sequence, bookings, KPIs, audit')
+    staged.add_argument('--html', help='Offline HTML report (Gantt, gaps, audit)')
+    staged.add_argument('--scenario-output', help='Scenario JSON after the material gates and any backward releases')
     setups = sub.add_parser('audit-setups', help='Audit explicit sequence-changeover rules against a plan')
     setups.add_argument('scenario')
     setups.add_argument('plan')
@@ -296,6 +302,49 @@ def main(argv=None) -> int:
                          'setup_audit': result.setup_audit.to_dict(),
                          'time_limit_reached': result.time_limit_reached}), end='')
             return 0 if result.setup_audit.valid and not result.plan.unscheduled else 2
+        if args.command == 'staged-plan':
+            from .adapters.staged_file import calculate_staged_preview, load_staged_file
+            from .engine.setup_capacity import audit_stage_capacity
+            from .engine.setup_sequence_search import sequence_metrics
+            outputs = [Path(p).resolve() for p in (args.output, args.html, args.scenario_output) if p]
+            inputs = {Path(args.scenario).resolve(), Path(args.spec).resolve()}
+            if len(set(outputs)) != len(outputs) or inputs & set(outputs):
+                raise ValidationError(['staged-plan outputs must be distinct and must not overwrite inputs'])
+            request = load_staged_file(Path(args.spec), scenario)
+            result = calculate_staged_preview(scenario, request)   # fail-closed: material shortage, audit, ...
+            sequence = result.machine_sequence or request.machine_sequence
+            violations = ()
+            if request.mode == 'normal':   # paused/holds plan on a normalized contract, audited inside
+                violations = audit_stage_capacity(
+                    request.setup_contract, result.material_scenario, sequence, result.staged.bookings,
+                    frozen_bookings=request.frozen_bookings)
+            try:
+                kpis = sequence_metrics(result.material_scenario, result.staged).as_dict()
+            except ValidationError:
+                kpis = None
+            report = {
+                'mode': request.mode, 'sequence': list(sequence),
+                'bookings': _bookings_json(result.staged.bookings), 'kpis': kpis,
+                'audit_violations': list(violations), 'unplanned': [],
+                'materials': {
+                    'pegs': [{'task_id': p.task_id, 'item_id': p.item_id, 'supply_id': p.supply_id,
+                              'quantity': str(p.quantity)} for p in result.allocation.pegs],
+                    'shortages': [[task, item, str(quantity)] for task, item, quantity in result.allocation.shortages]},
+                'erp_publishable': False}
+            if result.backward is not None:
+                report['backward'] = {
+                    'option': 'A', 'delayed_runs': [{'phase_id': p, 'seconds': s} for p, s in result.backward.delayed_runs],
+                    'setup_gaps_seconds': dict(result.backward.setup_gaps),
+                    'setup_releases': {p: r.isoformat() for p, r in result.backward.setup_releases}}
+            Path(args.output).write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+            if args.scenario_output:
+                Path(args.scenario_output).write_text(dumps(result.material_scenario), encoding='utf-8')
+            if args.html:
+                _write_stage_html(args.html, report, protected=set(inputs) | {Path(args.output).resolve()})
+            print(json.dumps({'mode': request.mode, 'sequence': report['sequence'], 'kpis': kpis,
+                              'shortages': report['materials']['shortages'],
+                              'audit_violations': report['audit_violations']}, sort_keys=True))
+            return 0 if not violations else 2
         if args.command == 'setup-stages':
             from .domain.setup_contract import load_setup_contract
             from .engine.setup_capacity import audit_stage_capacity

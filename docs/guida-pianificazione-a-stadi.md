@@ -69,6 +69,13 @@ Esce con 0 solo se le prenotazioni coincidono esattamente e l'audit e' pulito.
 pianificato (`NO_CANDIDATE`, `PREDECESSOR_UNPLANNED`, `NEST_MEMBER_UNPLANNED`); si puo'
 combinare con `--backward`. Senza `--partial` il comportamento resta bloccante.
 
+## Con i materiali
+
+`planning-factory staged-plan scenario.json stage-spec.json -o piano.json` aggiunge ai passi
+sopra il controllo dei materiali (stock netto o lordo con impegni, mai mescolati) partendo da
+una specifica v0.3 vincolata allo scenario da un digest esatto; vedi
+[anteprima v0.3](v03-staged-file-preview.md).
+
 ## Cosa questo percorso non fa
 
 - Non pubblica su Factory ne' su alcun ERP.
