@@ -53,6 +53,18 @@ class SetupStagesCliTests(unittest.TestCase):
             self.assertEqual(report['search']['baseline']['setup_seconds'], 5400)
             self.assertEqual(report['kpis']['setup_seconds'], 1800)
 
+    def test_state_grouped_start_cuts_setup_without_search(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src, con = self._files(root)
+            out = root / 'stages.json'
+            code, _ = run('setup-stages', str(src), str(con), '-o', str(out),
+                          '--start', 'state-grouped')
+            self.assertEqual(code, 0)
+            report = json.loads(out.read_text(encoding='utf-8'))
+            self.assertEqual(report['kpis']['setup_seconds'], 1800)
+            self.assertEqual(report['audit_violations'], [])
+
     def test_refuses_to_overwrite_inputs(self):
         with TemporaryDirectory() as tmp:
             src, con = self._files(Path(tmp))

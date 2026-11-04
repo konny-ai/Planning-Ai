@@ -7,6 +7,7 @@ from planning_factory.domain.setup_contract import load_setup_contract
 from planning_factory.engine.setup_stage_scheduler import schedule_setup_stages
 from planning_factory.engine.setup_sequence_search import (
     default_machine_sequence, optimize_setup_sequence, sequence_metrics,
+    state_grouped_sequence,
 )
 from planning_factory.engine.setup_capacity import audit_stage_capacity
 from planning_factory.engine.verification import verify_plan
@@ -158,3 +159,20 @@ class DefaultSequenceAndInsertionTests(unittest.TestCase):
         s = base([op('a'), op('b'), op('c')])
         with self.assertRaises(ValueError):
             optimize_setup_sequence(s, three(), objective='setup', neighbourhood='x')
+
+
+class StateGroupedStartTests(unittest.TestCase):
+    def test_groups_equal_states_and_cuts_setups(self):
+        s = base([op('a'), op('b'), op('c')])
+        c = three()  # a BLUE, b RED, c BLUE; machine starts RED
+        seq = state_grouped_sequence(s, c, ('job:a', 'job:b', 'job:c'))
+        self.assertEqual(seq, ('job:b', 'job:a', 'job:c'))
+        solution = schedule_setup_stages(s, c, seq)
+        self.assertEqual(sequence_metrics(s, solution).setup_seconds, 1800)
+
+    def test_is_a_permutation_and_deterministic(self):
+        s = base([op('a'), op('b'), op('c')])
+        c = three()
+        seq = state_grouped_sequence(s, c)
+        self.assertEqual(sorted(seq), ['job:a', 'job:b', 'job:c'])
+        self.assertEqual(seq, state_grouped_sequence(s, c))

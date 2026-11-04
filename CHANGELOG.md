@@ -7,7 +7,11 @@ pianifica attrezzaggio e lavorazione come stadi separati (ADR 003), con
 sequenza di default per scadenza o `--sequence`, ricerca opzionale
 `--objective delivery|setup|flow` (`--neighbourhood`, `--budget`) e report con
 prenotazioni, KPI e violazioni dell'audit indipendente (codice 2 se presenti).
-Non scrive mai sugli ingressi e non tocca Factory.
+Non scrive mai sugli ingressi e non tocca Factory. `--start state-grouped`
+(opzionale, default `edd`) parte da un ordine che raggruppa per macchina le
+fasi con lo stesso stato obiettivo, partendo dallo stato attuale della
+macchina (`state_grouped_sequence`); se viola le precedenze si ricade sull'ordine
+per scadenza.
 
 ## Non rilasciato — sequenza macchina automatica per lo scheduler setup/run
 

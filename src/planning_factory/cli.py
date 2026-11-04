@@ -74,6 +74,8 @@ def main(argv=None) -> int:
     stages.add_argument('contract', help='Canonical setup contract v1 JSON')
     stages.add_argument('-o', '--output', required=True, help='Stage plan JSON: sequence, bookings, KPIs, audit')
     stages.add_argument('--sequence', help='Comma-separated phase order; default: earliest due date, precedence-safe')
+    stages.add_argument('--start', choices=('edd', 'state-grouped'), default='edd',
+                        help='Default start order when --sequence is absent; state-grouped falls back to edd if infeasible')
     stages.add_argument('--objective', choices=('delivery', 'setup', 'flow'),
                         help='Optional bounded sequence search for this explicit objective')
     stages.add_argument('--neighbourhood', choices=('swap', 'insertion'), default='swap')
@@ -260,6 +262,15 @@ def main(argv=None) -> int:
             contract = load_setup_contract(Path(args.contract).read_text(encoding='utf-8'))
             sequence = (tuple(x for x in args.sequence.split(',') if x)
                         if args.sequence else default_machine_sequence(scenario))
+            if args.start == 'state-grouped' and not args.sequence:
+                from .engine.setup_sequence_search import state_grouped_sequence
+                try:
+                    candidate = state_grouped_sequence(scenario, contract, sequence)
+                    schedule_setup_stages(scenario, contract, candidate,
+                                          max_alternatives=args.max_alternatives)
+                    sequence = candidate
+                except ValidationError:
+                    pass  # infeasible grouping: keep the due-date order
             search = None
             if args.objective:
                 search = optimize_setup_sequence(

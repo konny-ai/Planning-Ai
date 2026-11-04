@@ -135,6 +135,42 @@ def default_machine_sequence(s: Scenario) -> tuple[str, ...]:
     return tuple(order)
 
 
+def state_grouped_sequence(s: Scenario, contract: SetupContract,
+                           base: tuple[str, ...] | None = None) -> tuple[str, ...]:
+    """Optional starting order that groups equal target states per machine.
+
+    Keeps the relative order of `base` (default: due-date order) across
+    machines and, on each machine, puts jobs whose target state equals the
+    machine's declared initial state first, then the other states by first
+    appearance. Completed history stays first. A neutral heuristic to cut
+    changeovers; it may violate precedences, in which case the staged
+    scheduler rejects it and the caller falls back to the base order.
+    """
+    base = base if base is not None else default_machine_sequence(s)
+    tasks, _, _ = compile_tasks(s)
+    phases = {p.id: p for p in contract.phases}
+    initial = dict(contract.initial_machine_states)
+    per_machine = {}
+    for tid in base:
+        per_machine.setdefault(phases[tid].machine_id, []).append(tid)
+    reordered = {}
+    for mid, jobs in per_machine.items():
+        done = [j for j in jobs if tasks[j].completed_at is not None]
+        active = [j for j in jobs if tasks[j].completed_at is None]
+        order = []
+        for j in active:
+            state = phases[j].target_state
+            if state not in order:
+                order.append(state)
+        if initial.get(mid) in order:
+            order.remove(initial[mid])
+            order.insert(0, initial[mid])
+        rank = {state: i for i, state in enumerate(order)}
+        reordered[mid] = done + sorted(active, key=lambda j: rank[phases[j].target_state])
+    cursor = {mid: iter(jobs) for mid, jobs in reordered.items()}
+    return tuple(next(cursor[phases[tid].machine_id]) for tid in base)
+
+
 def _neighbours(sequence, machine_by_task, neighbourhood='swap'):
     """Moves on each machine, including noncontiguous global positions.
 
