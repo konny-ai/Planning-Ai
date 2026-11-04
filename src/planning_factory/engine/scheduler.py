@@ -10,6 +10,11 @@ from .calendars import expand
 
 
 MAX_BACKWARD_REPAIRS = 5
+# Forward searches look first in a window this long and only then in the whole horizon. A
+# slot found inside the window is the one the full search would pick (the earliest fit, on
+# intervals that are identical up to the window end), so the result never depends on it; set
+# to None to search the whole horizon every time.
+SEARCH_WINDOW = timedelta(days=14)
 
 
 def plan(s: Scenario, *, dispatch_policy: str = 'priority',
@@ -197,6 +202,16 @@ def _schedule(s: Scenario, dispatch_policy: str, dispatch_order, record_constrai
             earliest_start[tid], earliest_finish[tid] = best or (lower, end)
 
     def search(t, lower, upper, backward=False, exact=None, max_start=None):
+        # Windowed first pass: only plain forward searches, and never with a preferred bundle
+        # (its 'saves only Ns' note compares against slots that may lie beyond the window).
+        if (SEARCH_WINDOW is not None and not backward and exact is None and max_start is None
+                and t.preferred_bundle is None and lower + SEARCH_WINDOW < upper):
+            found = search_in(t, lower, lower + SEARCH_WINDOW, backward, exact, max_start)
+            if found:
+                return found
+        return search_in(t, lower, upper, backward, exact, max_start)
+
+    def search_in(t, lower, upper, backward=False, exact=None, max_start=None):
         choices = []
         # Different efficiencies give different planned times (#78 P9): then the earliest finish wins,
         # otherwise the historical earliest start (same duration, so nearly the same finish).

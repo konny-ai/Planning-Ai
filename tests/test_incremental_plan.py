@@ -1,6 +1,7 @@
 """Exact incremental replanning: plan(resume=...) must equal the full plan, always."""
 import random
 import unittest
+from unittest import mock
 from dataclasses import replace
 from datetime import timedelta
 
@@ -143,3 +144,56 @@ class IncrementalPlanTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SearchWindowTests(unittest.TestCase):
+    """The windowed first pass must never change a plan."""
+
+    def long_scenario(self, rng):
+        machines = ['m1', 'm2'][:rng.randint(1, 2)]
+        ops = []
+        names = [f'p{i}' for i in range(rng.randint(4, 12))]
+        for i, name in enumerate(names):
+            preds = tuple(Dependency(names[j], rng.choice(['FS', 'SS']), rng.choice([0, 3600]))
+                          for j in range(i) if rng.random() < 0.2)
+            hours = rng.choice([1, 8, 40, 80, 160])      # long tasks push work past the window
+            ops.append(Operation(name, f'o{i % 3}', hours * 3600, (alt(rng.choice(machines)),),
+                                 predecessors=preds, splittable=rng.random() < 0.6,
+                                 due=dt(month=12, day=rng.randint(1, 20)) if rng.random() < 0.5 else None,
+                                 release=dt(day=rng.randint(19, 28)) if rng.random() < 0.3 else None))
+        return scenario(ops, resources=tuple(Resource(m, 'work') for m in machines),
+                        end=dt(month=12, day=30, hour=0))
+
+    def test_windowed_search_equals_full_horizon_search(self):
+        beyond = 0
+        for seed in range(200):
+            s = self.long_scenario(random.Random(900 + seed))
+            with self.subTest(seed=seed):
+                windowed = plan(s)
+                with mock.patch.object(scheduler, 'SEARCH_WINDOW', None):
+                    full = plan(s)
+                self.assertEqual(windowed, full)
+                limit = s.start + timedelta(days=14)
+                beyond += any(a.segments and a.segments[0].start > limit for a in full.assignments)
+        self.assertGreater(beyond, 20, 'some tasks must land beyond the window (fallback path)')
+
+
+class CompileMemoTests(unittest.TestCase):
+    def test_memoized_per_object_never_stale_and_callers_cannot_alter_it(self):
+        from planning_factory.domain import validation
+        s = scenario([Operation('a', 'o', 3600, (alt('m'),)), Operation('b', 'o', 3600, (alt('m'),))])
+        first = compile_tasks(s)
+        first[0].clear()                                   # a caller mutating its own copy
+        again = compile_tasks(s)
+        self.assertEqual(set(again[0]), {'job:a', 'job:b'})
+        self.assertEqual(again[1:], compile_tasks(s)[1:])
+        changed = replace(s, operations=s.operations[:1])  # a different object: a different result
+        self.assertEqual(set(compile_tasks(changed)[0]), {'job:a'})
+        for i in range(40):                                # eviction keeps results exact
+            other = replace(s, id=f'x{i}')
+            self.assertEqual(set(compile_tasks(other)[0]), {'job:a', 'job:b'})
+        self.assertEqual(set(compile_tasks(s)[0]), {'job:a', 'job:b'})
+        invalid = replace(s, operations=(Operation('z', 'o', 3600, ()),))
+        for _ in range(2):                                 # failures are not cached
+            with self.assertRaises(validation.ValidationError):
+                compile_tasks(invalid)

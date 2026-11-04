@@ -14,6 +14,17 @@ esatta con piano completo su 250 scenari casuali, su 150 scenari a stadi e sui c
 completate e inizi fissi; stesso hash delle prenotazioni sulle misure: 80 fasi 11,4 s -> 8,9 s,
 160 fasi 32,3 s -> 22,6 s. Il resto del tempo e' nel calcolo degli intervalli liberi.
 
+## Non rilasciato — ottimizzazioni esatte del motore
+
+(1) `subtract` degli intervalli lavora sui tagli invece che su ogni intervallo (provato uguale alla
+definizione su 3.000 casi casuali); (2) la ricerca in avanti guarda prima in una finestra di 14
+giorni (`scheduler.SEARCH_WINDOW`) e poi sull'orizzonte intero: uno slot trovato nella finestra e'
+quello che troverebbe la ricerca completa, quindi il piano non cambia (provato su 200 scenari con
+attivita' lunghe, anche oltre la finestra; escluse ricerche all'indietro, a inizio esatto e con
+alternativa preferita); (3) `compile_tasks` e' memorizzato per oggetto scenario, restituendo
+sempre un dizionario nuovo. Stesso hash delle prenotazioni su tutte le misure; backward: 80 fasi
+8,9 s -> 6,8 s, 160 fasi 22,6 s -> 18,6 s, 320 fasi 141 s -> 97 s.
+
 ## Non rilasciato — guida e esempio per la pianificazione a stadi
 
 `docs/guida-pianificazione-a-stadi.md` raccoglie in un solo posto ingressi, sequenza,
