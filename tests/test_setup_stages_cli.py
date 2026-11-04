@@ -136,6 +136,7 @@ class SetupStagesCliTests(unittest.TestCase):
             self.assertEqual(report['search']['baseline']['setup_seconds'], 5400)
             self.assertEqual(report['kpis']['setup_seconds'], 1800)  # searched order, then backward
             self.assertEqual(report['backward']['baseline']['setup_seconds'], 1800)
+            self.assertEqual(report['search']['evaluated_on'], 'backward plan')
 
     def test_backward_and_just_in_time_are_mutually_exclusive(self):
         with TemporaryDirectory() as tmp:

@@ -288,3 +288,45 @@ class BackwardOptionATests(unittest.TestCase):
                            forward[('job:c', 'setup')].segments[0].start)
         self.assertEqual(dict(result.setup_gaps)['job:c'], 3600)  # lunch break cannot host a setup
         self.assertEqual(audit_stage_capacity(c, result.scenario, seq, result.solution.bookings), ())
+
+
+class BackwardSequenceSearchTests(unittest.TestCase):
+    def _s(self):
+        return base([op(n, due=dt(day=23, hour=17)) for n in 'abc'])
+
+    def test_search_scores_the_backward_plan_and_cuts_setup(self):
+        from planning_factory.engine.setup_sequence_search import optimize_backward_sequence
+        s, c = self._s(), three()
+        found = optimize_backward_sequence(s, c, ('job:a', 'job:b', 'job:c'),
+                                           objective='setup', max_evaluations=12,
+                                           neighbourhood='insertion')
+        self.assertTrue(found.improved)
+        self.assertEqual(found.baseline.setup_seconds, 5400)
+        self.assertEqual(found.selected.setup_seconds, 1800)
+        self.assertEqual(found.selected.late_orders, 0)
+        self.assertEqual(audit_stage_capacity(c, found.result.scenario, found.sequence,
+                                              found.result.solution.bookings), ())
+        self.assertEqual(found, optimize_backward_sequence(
+            s, c, ('job:a', 'job:b', 'job:c'), objective='setup', max_evaluations=12,
+            neighbourhood='insertion'))
+
+    def test_budget_one_keeps_initial_order_and_default_start_works(self):
+        from planning_factory.engine.setup_sequence_search import optimize_backward_sequence
+        s, c = self._s(), three()
+        one = optimize_backward_sequence(s, c, ('job:a', 'job:b', 'job:c'),
+                                         objective='delivery', max_evaluations=1)
+        self.assertFalse(one.improved)
+        self.assertEqual(one.sequence, ('job:a', 'job:b', 'job:c'))
+        auto = optimize_backward_sequence(s, c, objective='gap', max_evaluations=6)
+        self.assertEqual(sorted(auto.sequence), ['job:a', 'job:b', 'job:c'])
+        self.assertLessEqual(auto.selected_gap_seconds, auto.baseline_gap_seconds)
+
+    def test_rejects_flow_and_bad_arguments(self):
+        from planning_factory.engine.setup_sequence_search import optimize_backward_sequence
+        s, c = self._s(), three()
+        with self.assertRaises(ValueError):
+            optimize_backward_sequence(s, c, objective='flow')
+        with self.assertRaises(ValueError):
+            optimize_backward_sequence(s, c, objective='setup', max_evaluations=100)
+        with self.assertRaises(ValueError):
+            optimize_backward_sequence(s, c, objective='setup', neighbourhood='x')

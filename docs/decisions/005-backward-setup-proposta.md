@@ -69,5 +69,6 @@ attrezzaggio subito prima di essa, sequenza macchina fissata in anticipo.
 
 Non cambia la durata ne' il numero degli attrezzaggi, non sposta mai nulla
 prima del piano in avanti e non accede a Factory. La sequenza e' un dato fissato prima del backward: si puo' ottimizzarla
-con `--objective` (la ricerca precede il backward) o fornirla con `--sequence`; i rilasci derivati dei setup sono
+con `--objective` (con `--backward` ogni candidato e' valutato sul proprio
+piano backward; obiettivi `delivery`, `setup`, `gap`) o fornirla con `--sequence`; i rilasci derivati dei setup sono
 riportati nel report, non nello scenario esportato.

@@ -1,5 +1,15 @@
 # Changelog
 
+## Non rilasciato — ricerca di sequenza sul piano backward
+
+`optimize_backward_sequence` e `setup-stages --backward --objective delivery|setup|gap`
+cercano la sequenza macchina valutando ogni candidato direttamente sul proprio
+piano backward (ADR 005, opzione A): lavorazioni al più tardi e attrezzaggi
+subito prima. Obiettivi `delivery`, `setup` e `gap` (somma dei gap
+setup→lavorazione); `flow` non è ammesso perché il makespan non è significativo
+per piani just-in-time. Ogni candidato è ripianificato e auditato, con budget
+rigido (1..64) e nessuna garanzia di ottimalità globale.
+
 ## Non rilasciato — modalità backward (ADR 005, opzione A, scelta dal committente)
 
 `backward_setup_before_run` / `setup-stages --backward --scenario-output ...`:

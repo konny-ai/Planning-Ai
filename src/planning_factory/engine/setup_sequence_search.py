@@ -469,3 +469,90 @@ def backward_setup_before_run(s: Scenario, contract: SetupContract,
             gaps.append((pid, int((run.segments[0].start - setup.segments[-1].end).total_seconds())))
     return BackwardSetupResult(current, current_s, tuple(sorted(releases.items())),
                                first.delayed, tuple(gaps), first.baseline, metrics)
+
+
+@dataclass(frozen=True)
+class BackwardSequenceSearch:
+    objective: str
+    result: BackwardSetupResult
+    sequence: tuple[str, ...]
+    baseline: SequenceMetrics
+    baseline_gap_seconds: int
+    selected: SequenceMetrics
+    selected_gap_seconds: int
+    evaluated: int
+    rejected: int
+    improved: bool
+
+
+def _backward_score(m: SequenceMetrics, gap: int, objective: str):
+    if objective == 'delivery':
+        return (m.late_orders, m.tardiness_seconds, m.setup_seconds, gap)
+    if objective == 'setup':
+        return (m.setup_seconds, m.late_orders, m.tardiness_seconds, gap)
+    if objective == 'gap':
+        return (m.late_orders, m.tardiness_seconds, gap, m.setup_seconds)
+    raise ValueError('backward objective must be delivery, setup or gap '
+                     '(makespan is not meaningful for just-in-time plans)')
+
+
+def optimize_backward_sequence(s: Scenario, contract: SetupContract,
+                               initial_sequence: tuple[str, ...] | None = None, *,
+                               objective: str, max_evaluations: int = 12,
+                               max_alternatives: int = 32,
+                               neighbourhood: str = 'swap') -> BackwardSequenceSearch:
+    """Bounded best-improvement search that scores each candidate order on its
+    own ADR 005 option-A plan (runs late, setups right before them).
+
+    Objectives: ``delivery`` (late orders, tardiness, setup, gaps), ``setup``
+    (setup, late, tardiness, gaps) or ``gap`` (late, tardiness, total
+    setup-to-run gap, setup). Every candidate is fully re-planned and audited;
+    infeasible orders are rejected; ties keep the current order. No claim of
+    global optimality. Each evaluation is several re-plans, so keep the budget
+    small.
+    """
+    _backward_score(SequenceMetrics(0, 0, 0, 0), 0, objective)
+    if neighbourhood not in ('swap', 'insertion'):
+        raise ValueError("neighbourhood must be 'swap' or 'insertion'")
+    if type(max_evaluations) is not int or not 1 <= max_evaluations <= 64:
+        raise ValueError('max_evaluations must be integer 1..64')
+    if initial_sequence is None:
+        initial_sequence = default_machine_sequence(s)
+    tasks, _, _ = compile_tasks(s)
+    planned = {k for k, v in tasks.items() if v.external_end is None}
+    if len(initial_sequence) != len(planned) or set(initial_sequence) != planned:
+        raise ValidationError(['initial machine sequence must contain each planned task once'])
+    machine_by_task = {p.id: p.machine_id for p in contract.phases}
+
+    def evaluate(sequence):
+        result = backward_setup_before_run(s, contract, sequence,
+                                           max_alternatives=max_alternatives)
+        return result, sum(g for _, g in result.setup_gaps)
+
+    best_result, best_gap = evaluate(initial_sequence)
+    baseline, baseline_gap = best_result.selected, best_gap
+    current, evaluated, rejected = initial_sequence, 1, 0
+    seen = {initial_sequence}
+    while evaluated < max_evaluations:
+        improved = False
+        for candidate in _neighbours(current, machine_by_task, neighbourhood):
+            if evaluated >= max_evaluations:
+                break
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            evaluated += 1
+            try:
+                result, gap = evaluate(candidate)
+            except ValidationError:
+                rejected += 1
+                continue
+            if (_backward_score(result.selected, gap, objective) <
+                    _backward_score(best_result.selected, best_gap, objective)):
+                best_result, best_gap, current = result, gap, candidate
+                improved = True
+        if not improved:
+            break
+    return BackwardSequenceSearch(objective, best_result, current, baseline, baseline_gap,
+                                  best_result.selected, best_gap, evaluated, rejected,
+                                  current != initial_sequence)

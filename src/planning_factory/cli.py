@@ -76,7 +76,7 @@ def main(argv=None) -> int:
     stages.add_argument('--sequence', help='Comma-separated phase order; default: earliest due date, precedence-safe')
     stages.add_argument('--start', choices=('edd', 'state-grouped', 'best'), default='edd',
                         help='Default start order when --sequence is absent; state-grouped falls back to edd if infeasible; best needs --objective and keeps the better of the two')
-    stages.add_argument('--objective', choices=('delivery', 'setup', 'flow'),
+    stages.add_argument('--objective', choices=('delivery', 'setup', 'flow', 'gap'),
                         help='Optional bounded sequence search for this explicit objective')
     stages.add_argument('--neighbourhood', choices=('swap', 'insertion'), default='swap')
     stages.add_argument('--just-in-time-tail', action='store_true',
@@ -283,7 +283,15 @@ def main(argv=None) -> int:
                 except ValidationError:
                     pass  # infeasible grouping: keep the due-date order
             search = None
-            if args.objective:
+            backward_search = None
+            if args.objective and args.backward:
+                from .engine.setup_sequence_search import optimize_backward_sequence
+                backward_search = optimize_backward_sequence(
+                    scenario, contract, sequence, objective=args.objective, max_evaluations=args.budget,
+                    max_alternatives=args.max_alternatives, neighbourhood=args.neighbourhood)
+                sequence = backward_search.sequence
+                solution = backward_search.result.solution
+            elif args.objective:
                 search = optimize_setup_sequence(
                     scenario, contract, sequence, objective=args.objective, max_evaluations=args.budget,
                     max_alternatives=args.max_alternatives, neighbourhood=args.neighbourhood)
@@ -301,8 +309,9 @@ def main(argv=None) -> int:
                 protected = {Path(args.scenario).resolve(), Path(args.contract).resolve(), Path(args.output).resolve()}
                 if Path(args.scenario_output).resolve() in protected:
                     raise ValidationError(['--scenario-output must be a distinct new file'])
-                back = backward_setup_before_run(scenario, contract, sequence,
-                                                 max_alternatives=args.max_alternatives)
+                back = (backward_search.result if backward_search is not None else
+                        backward_setup_before_run(scenario, contract, sequence,
+                                                  max_alternatives=args.max_alternatives))
                 solution, audit_scenario = back.solution, back.scenario
                 Path(args.scenario_output).write_text(dumps(audit_scenario), encoding='utf-8')
             if args.just_in_time_tail:
@@ -336,6 +345,13 @@ def main(argv=None) -> int:
                 report['just_in_time_tail'] = {
                     'experimental': True, 'delayed': [{'phase_id': p, 'seconds': s} for p, s in jit.delayed],
                     'rejected': list(jit.rejected), 'baseline': jit.baseline.as_dict()}
+            if backward_search is not None:
+                report['search'] = {'objective': backward_search.objective, 'evaluated': backward_search.evaluated,
+                                    'rejected': backward_search.rejected, 'improved': backward_search.improved,
+                                    'evaluated_on': 'backward plan',
+                                    'baseline': backward_search.baseline.as_dict(),
+                                    'baseline_gap_seconds': backward_search.baseline_gap_seconds,
+                                    'selected_gap_seconds': backward_search.selected_gap_seconds}
             if search is not None:
                 report['search'] = {'objective': search.objective, 'evaluated': search.evaluated,
                                     'rejected': search.rejected, 'improved': search.improved,

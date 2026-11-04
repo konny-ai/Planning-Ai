@@ -12,7 +12,7 @@ from planning_factory.domain.setup_contract import load_setup_contract
 from planning_factory.domain.validation import ValidationError
 from planning_factory.engine.setup_capacity import audit_stage_capacity
 from planning_factory.engine.setup_sequence_search import (
-    backward_setup_before_run, best_start_sequence, default_machine_sequence, just_in_time_tail,
+    backward_setup_before_run, best_start_sequence, optimize_backward_sequence, default_machine_sequence, just_in_time_tail,
     optimize_setup_sequence, sequence_metrics, state_grouped_sequence,
 )
 from planning_factory.engine.setup_stage_scheduler import schedule_setup_stages
@@ -125,6 +125,11 @@ class StageFuzzTests(unittest.TestCase):
                 self.assertEqual(back.selected.setup_seconds, back.baseline.setup_seconds)
                 forward = {(b.phase_id, b.stage): b for b in
                            schedule_setup_stages(s, contract, best).bookings}
+                found = optimize_backward_sequence(s, contract, best, objective='setup',
+                                                   max_evaluations=4)
+                self.assertEqual(audit_stage_capacity(contract, found.result.scenario, found.sequence,
+                                                      found.result.solution.bookings), ())
+                self.assertLessEqual(found.selected.setup_seconds, found.baseline.setup_seconds)
                 for b in back.solution.bookings:   # nothing is ever pulled earlier
                     self.assertGreaterEqual(b.segments[0].start, forward[(b.phase_id, b.stage)].segments[0].start)
         self.assertGreater(checked, 20)
