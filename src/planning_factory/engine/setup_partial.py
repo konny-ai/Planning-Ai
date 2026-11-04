@@ -45,13 +45,18 @@ def plan_setup_stages_partial(s: Scenario, contract: SetupContract,
     A phase has no candidate when its operation lists no alternative (and is
     neither completed nor a supplier milestone) or when the caller names it in
     ``extra_without_candidates`` (operation IDs, e.g. from a data-quality
-    `no_resource` finding). Frozen bookings of removed tasks are rejected.
+    `no_resource` finding; completed history and supplier milestones are rejected, they need no
+    resource). Frozen bookings of removed tasks are rejected.
     Without a ``machine_sequence`` the due-date order of the planned tasks is used.
     """
     ops = {o.id: o for o in s.operations}
     unknown = [x for x in extra_without_candidates if x not in ops]
     if unknown:
         raise ValidationError([f'unknown operation(s) without candidates: {sorted(unknown)}'])
+    history = sorted(x for x in extra_without_candidates
+                     if ops[x].completed_at is not None or ops[x].external_end is not None)
+    if history:   # finished work and supplier milestones never need a resource: a caller mistake
+        raise ValidationError([f'completed or supplier operations cannot lack candidates: {history}'])
     reason = {}
     for o in s.operations:
         if (not o.alternatives and o.completed_at is None and o.external_end is None) \

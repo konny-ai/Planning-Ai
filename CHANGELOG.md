@@ -24,6 +24,13 @@ l'eviction non puo' piu' fallire con una chiave gia' rimossa. Non applicati: div
 `setup_sequence_search.py` (819 righe) e l'handler `setup-stages` della CLI (~215 righe): sono
 refactoring ampi senza cambiamento di comportamento.
 
+## Non rilasciato — correzione dalla quarta revisione (piano parziale)
+
+`--no-candidate` / `extra_without_candidates` rifiutano ora le operazioni gia' completate e i
+traguardi fornitore (non servono risorse): prima venivano rimosse in silenzio dal piano e
+trascinavano via i successori pianificabili (`PREDECESSOR_UNPLANNED`). Provata anche la modalita'
+`holds` di `staged-plan` (normale, backward, con ricerca): audit pulito. Test di regressione.
+
 ## Non rilasciato — correzioni dalla terza revisione (ricerca di sequenza)
 
 (1) `default_machine_sequence` andava in `KeyError` con due traguardi fornitore concatenati elencati

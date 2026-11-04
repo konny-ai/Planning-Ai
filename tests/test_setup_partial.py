@@ -93,6 +93,19 @@ class PartialPlanningTests(unittest.TestCase):
 if __name__ == '__main__':
     unittest.main()
 
+    def test_completed_or_supplier_operations_cannot_be_declared_without_candidates(self):
+        # Found by the fourth review pass: naming a completed operation dropped its plannable successor.
+        s = base([op('done', hours=0, completed_at=dt(hour=0)),
+                  op('a', predecessors=(Dependency('done', 'FS', 3600),)), op('b'),
+                  Operation('sup', 'order', 0, (), external_end=dt(day=20))])
+        c = contract('a', 'b')
+        for name in ('done', 'sup'):
+            with self.subTest(name=name), self.assertRaisesRegex(ValidationError, 'cannot lack candidates'):
+                plan_setup_stages_partial(s, c, ('job:a', 'job:b'), extra_without_candidates=(name,))
+        ok = plan_setup_stages_partial(s, c, ('job:a', 'job:b'))     # nothing declared: all plannable
+        self.assertEqual(ok.unplanned, ())
+        self.assertEqual({b.phase_id for b in ok.staged.bookings}, {'job:a', 'job:b'})
+
 
 class DigestMemoTests(unittest.TestCase):
     def test_digest_is_memoized_per_object_and_never_stale(self):
