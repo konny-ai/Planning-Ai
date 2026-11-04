@@ -1,5 +1,19 @@
 # Changelog
 
+## Non rilasciato — ripianificazione incrementale esatta
+
+`plan(..., trace=, resume=)`: se uno scenario differisce dal precedente solo per il `release`
+di alcune attivita', quelle schedulate **prima** della prima modificata nello stesso ordine di
+dispatch sono identiche (con la politica `priority` l'ordine dipende solo da chiavi statiche,
+non dal rilascio) e si riusano invece di ricercarle di nuovo. Ogni precondizione e' ricontrollata
+(`_reusable`: stesse risorse, calendari, impostazioni, orizzonte, archi e attivita' tranne il solo
+rilascio dichiarato; solo attivita' in avanti; piano precedente senza lavoro non collocato); se una
+fallisce si ripianifica per intero, quindi il risultato non dipende mai da `resume`. Lo scheduler a
+stadi la usa nei cicli del backward (`resume_from`, `changed_stage_tasks`). Provata l'equivalenza
+esatta con piano completo su 250 scenari casuali, su 150 scenari a stadi e sui casi con nesting,
+completate e inizi fissi; stesso hash delle prenotazioni sulle misure: 80 fasi 11,4 s -> 8,9 s,
+160 fasi 32,3 s -> 22,6 s. Il resto del tempo e' nel calcolo degli intervalli liberi.
+
 ## Non rilasciato — guida e esempio per la pianificazione a stadi
 
 `docs/guida-pianificazione-a-stadi.md` raccoglie in un solo posto ingressi, sequenza,

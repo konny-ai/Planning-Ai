@@ -5,7 +5,7 @@ This scheduler never touches SQL/ERP. It does not claim to support historical
 bookings, frozen starts, backward policies or every production dependency.
 Unsupported cases fail closed. The canonical input remains ERP-independent.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import combinations, product
 
 from planning_factory.domain.models import (
@@ -29,6 +29,13 @@ class StagedSetupResult:
     bookings: tuple[StageBooking, ...]
     # Maps compiled stage tasks to their original canonical phase and stage.
     stage_map: tuple[tuple[str, str, str], ...]
+    # Planner trace used by the exact incremental replan; never part of equality.
+    resume_token: dict | None = field(default=None, compare=False, repr=False)
+
+
+def stage_task_id(phase_id: str, stage: str) -> str:
+    """Compiled task ID of a phase's setup or run in the stage scenario."""
+    return f'job:stage_{stage}__{phase_id}'
 
 
 def _bundles(requirements: tuple[StageRequirement, ...], *, machine_id: str | None,
@@ -67,7 +74,9 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
                           max_alternatives: int = 32,
                           frozen_bookings: tuple[StageBooking, ...] = (),
                           setup_releases: dict | None = None,
-                          audit: bool = True) -> StagedSetupResult:
+                          audit: bool = True,
+                          resume_from: 'StagedSetupResult | None' = None,
+                          changed_stage_tasks: tuple[str, ...] = ()) -> StagedSetupResult:
     """Plan real setup and production stages with finite fractional capacity.
 
     The machine order is explicit. A phase's setup may cross a shift boundary
@@ -78,6 +87,10 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
     failing on unscheduled work): only for search loops that call
     ``verify_staged`` on every candidate they are about to keep. The default
     always verifies.
+    ``resume_from`` (a previous result) with ``changed_stage_tasks`` (see
+    ``stage_task_id``) replans incrementally: tasks dispatched before the first
+    changed one are reused. It is exact by construction (the planner re-checks every
+    precondition and otherwise replans in full), so the result never depends on it.
     Setup never overlaps the preceding run on the same machine. Fully intact
     one-segment frozen stages can be pinned; partial WIP still fails closed.
     A run with fixed_start is pinned to that instant (setup must
@@ -230,7 +243,11 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
         calendars=s.calendars, resources=scaled_resources,
         operations=tuple(sorted(stage_ops, key=lambda o: o.id)),
         settings=Settings(mode='forward'))
-    result = plan(stage_scenario)
+    trace = {}
+    resume = None
+    if resume_from is not None and resume_from.resume_token and changed_stage_tasks:
+        resume = {**resume_from.resume_token, 'changed': frozenset(changed_stage_tasks)}
+    result = plan(stage_scenario, resume=resume, trace=trace)
     problems = verify_plan(stage_scenario, result) if audit else ()
     if problems or result.unscheduled:
         raise ValidationError(['staged schedule not feasible/audited',
@@ -247,7 +264,7 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
                                           frozen_bookings=frozen_bookings)
         if violations:
             raise ValidationError(['staged schedule failed independent capacity audit', *violations])
-    return StagedSetupResult(stage_scenario, result, tuple(booking), tuple(mapping))
+    return StagedSetupResult(stage_scenario, result, tuple(booking), tuple(mapping), trace or None)
 
 
 def verify_staged(s: Scenario, contract: SetupContract, machine_sequence: tuple[str, ...],

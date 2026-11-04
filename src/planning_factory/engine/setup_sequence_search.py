@@ -11,7 +11,9 @@ from planning_factory.domain.models import Scenario
 from planning_factory.domain.setup_contract import SetupContract
 from planning_factory.domain.validation import ValidationError, compile_tasks
 from .calendars import expand, intersect
-from .setup_stage_scheduler import StagedSetupResult, schedule_setup_stages, verify_staged
+from .setup_stage_scheduler import (
+    StagedSetupResult, schedule_setup_stages, stage_task_id, verify_staged,
+)
 
 
 @dataclass(frozen=True)
@@ -372,7 +374,9 @@ def just_in_time_tail(s: Scenario, contract: SetupContract,
             try:
                 candidate = schedule_setup_stages(candidate_s, contract, machine_sequence,
                                                   max_alternatives=max_alternatives,
-                                                  frozen_bookings=frozen_bookings, audit=False)
+                                                  frozen_bookings=frozen_bookings, audit=False,
+                                                  resume_from=current,
+                                                  changed_stage_tasks=(stage_task_id(pid, 'run'),))
             except ValidationError:
                 return None
             rest = lambda r: sorted((x for x in r.bookings if x.phase_id != pid),
@@ -504,7 +508,8 @@ def backward_setup_before_run(s: Scenario, contract: SetupContract,
                 candidate = schedule_setup_stages(
                     current_s, contract, machine_sequence,
                     max_alternatives=max_alternatives, setup_releases=trial,
-                    frozen_bookings=frozen_bookings, audit=False)
+                    frozen_bookings=frozen_bookings, audit=False, resume_from=current,
+                    changed_stage_tasks=(stage_task_id(pid, 'setup'),))
             except ValidationError:
                 return None
             rest = lambda r: sorted((x for x in r.bookings

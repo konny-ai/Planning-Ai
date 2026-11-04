@@ -13,7 +13,8 @@ MAX_BACKWARD_REPAIRS = 5
 
 
 def plan(s: Scenario, *, dispatch_policy: str = 'priority',
-         dispatch_order: tuple[str, ...] | None = None, record_constraints: bool = False) -> Plan:
+         dispatch_order: tuple[str, ...] | None = None, record_constraints: bool = False,
+         resume: dict | None = None, trace: dict | None = None) -> Plan:
     """Plan deterministically, then repair backward targets that proved unreachable.
 
     Backward (ALAP) targets are capacity-free estimates, fixed on a predecessor before its
@@ -21,9 +22,19 @@ def plan(s: Scenario, *, dispatch_policy: str = 'priority',
     forward, the predecessors already sit too late to recover. Each repair round moves the
     backward targets of those predecessors earlier by the shortfall and replans; the repaired
     plan is kept only if it neither leaves more work unplaced nor adds tardiness.
+
+    ``trace`` (output) and ``resume`` (input) enable an exact incremental replan: when a
+    scenario differs from a previous one only by the ``release`` of some tasks, the tasks
+    dispatched before the first changed one are identical, so their assignments are reused
+    instead of searched again. ``resume`` is ``trace`` of the previous plan plus
+    ``changed`` (task IDs). Every precondition is re-checked (``_reusable``); when any fails
+    the plan is simply computed in full, so the result never depends on ``resume``.
     """
     shifts: dict[str, int] = {}
-    best = _schedule(s, dispatch_policy, dispatch_order, record_constraints, shifts, report := {})
+    best = _schedule(s, dispatch_policy, dispatch_order, record_constraints, shifts, report := {}, resume)
+    if trace is not None and not shifts and 'order' in report:
+        trace.update(order=report['order'], tasks=report['tasks'], edges=report['edges'], scenario=s,
+                     plan=best, record_constraints=record_constraints)
     for _ in range(MAX_BACKWARD_REPAIRS):
         if not report['shifts']:
             break
@@ -42,8 +53,39 @@ def _rank(result: Plan) -> tuple[int, int]:
     return len(result.unscheduled), sum(o.tardiness_seconds or 0 for o in result.orders)
 
 
+def _reusable(s: Scenario, tasks: dict, edges, record_constraints: bool, resume: dict) -> dict:
+    """Assignments of the previous plan that are provably identical in this one, or {}.
+
+    Valid only for forward-only 'priority' dispatch, where the dispatch order depends on
+    static keys (never on ``release``). Everything except the ``release`` of the changed
+    tasks must be equal, and the previous plan must have no unscheduled work.
+    """
+    from dataclasses import replace
+    base_s, base_tasks = resume['scenario'], resume['tasks']
+    if (resume.get('record_constraints') != record_constraints
+            or (s.start, s.end, s.calendars, s.resources, s.settings) !=
+            (base_s.start, base_s.end, base_s.calendars, base_s.resources, base_s.settings)
+            or set(tasks) != set(base_tasks) or set(edges) != set(resume['edges'])
+            or any(t.mode != 'forward' for t in tasks.values())
+            or resume['plan'].unscheduled):
+        return {}
+    changed = resume['changed']
+    for tid, task in tasks.items():
+        before = base_tasks[tid]
+        if (replace(task, release=before.release) if tid in changed else task) != before:
+            return {}
+    order = resume['order']
+    cut = next((i for i, tid in enumerate(order) if tid in changed), None)
+    if cut is None:
+        return {}   # a changed task was not dispatched (pinned or historic): replan in full
+    by_id = {a.task_id: a for a in resume['plan'].assignments}
+    if any(tid not in by_id for tid in order[:cut]):
+        return {}
+    return {tid: by_id[tid] for tid in order[:cut]}
+
+
 def _schedule(s: Scenario, dispatch_policy: str, dispatch_order, record_constraints: bool,
-              shifts: dict, report: dict) -> Plan:
+              shifts: dict, report: dict, resume: dict | None = None) -> Plan:
     """Plan deterministically; alternative dispatch policies are opt-in only.
 
     With ``record_constraints`` every assignment also carries one machine-readable
@@ -60,6 +102,10 @@ def _schedule(s: Scenario, dispatch_policy: str, dispatch_order, record_constrai
                 or len(dispatch_order) != len(tasks) or len(set(dispatch_order)) != len(tasks)
                 or set(dispatch_order) != set(tasks)):
             raise ValueError('dispatch_order must be a permutation of all task IDs under priority mode')
+    reuse = {}
+    if resume is not None and dispatch_policy == 'priority' and dispatch_order is None and not shifts:
+        reuse = _reusable(s, tasks, edges, record_constraints, resume)
+    dispatched = []
     order_rank = {tid: pos for pos, tid in enumerate(dispatch_order)} if dispatch_order is not None else None
     resources = {r.id: r for r in s.resources}
     calendars = {c.id: expand(c, s.start, s.end) for c in s.calendars}
@@ -290,6 +336,11 @@ def _schedule(s: Scenario, dispatch_policy: str, dispatch_order, record_constrai
                 waiting[e.successor] -= 1
                 if not waiting[e.successor]:
                     heapq.heappush(ready, (priority(e.successor), e.successor))
+        dispatched.append(tid)
+        if tid in reuse:   # identical to the previous plan: no search needed
+            assigned[tid] = reuse[tid]
+            reserve(reuse[tid], reservations)
+            continue
         t = tasks[tid]
         blocked = [e.predecessor for e in incoming[tid] if e.predecessor in failed]
         if blocked:
@@ -359,6 +410,7 @@ def _schedule(s: Scenario, dispatch_policy: str, dispatch_order, record_constrai
                     if assigned[e.predecessor].effective_mode == 'backward':
                         wanted[e.predecessor] = max(wanted.get(e.predecessor, 0), shortfall)
     report['shifts'] = wanted
+    report.update(order=tuple(dispatched), tasks=tasks, edges=frozenset(edges))
 
     # Fixed predecessors may have been booked after their fixed successors. Refuse
     # inconsistent pinned/history input rather than returning an invalid plan.

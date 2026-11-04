@@ -138,3 +138,38 @@ class StageFuzzTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class IncrementalEqualsFullTests(unittest.TestCase):
+    def test_backward_with_and_without_incremental_replanning_is_identical(self):
+        from unittest import mock
+        from planning_factory.engine import setup_sequence_search as module
+        original = module.schedule_setup_stages
+
+        def without_resume(*args, **kwargs):
+            kwargs.pop('resume_from', None)
+            kwargs.pop('changed_stage_tasks', None)
+            return original(*args, **kwargs)
+
+        compared = 0
+        for seed in range(150):
+            rng = random.Random(5000 + seed)
+            try:
+                s, data = build(rng)
+                if not data['phases']:
+                    continue
+                contract = load_setup_contract(json.dumps(data))
+                sequence = default_machine_sequence(s)
+                incremental = backward_setup_before_run(s, contract, sequence)
+            except ValidationError:
+                continue
+            with mock.patch.object(module, 'schedule_setup_stages', without_resume):
+                full = backward_setup_before_run(s, contract, sequence)
+            with self.subTest(seed=seed):
+                self.assertEqual(incremental.solution.bookings, full.solution.bookings)
+                self.assertEqual(incremental.setup_releases, full.setup_releases)
+                self.assertEqual(incremental.delayed_runs, full.delayed_runs)
+                self.assertEqual(incremental.setup_gaps, full.setup_gaps)
+                self.assertEqual(incremental.selected, full.selected)
+                compared += 1
+        self.assertGreater(compared, 30)
