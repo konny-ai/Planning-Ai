@@ -11,7 +11,7 @@ from planning_factory.domain.models import Scenario
 from planning_factory.domain.setup_contract import SetupContract
 from planning_factory.domain.validation import ValidationError, compile_tasks
 from .calendars import expand, intersect
-from .setup_stage_scheduler import StagedSetupResult, schedule_setup_stages
+from .setup_stage_scheduler import StagedSetupResult, schedule_setup_stages, verify_staged
 
 
 @dataclass(frozen=True)
@@ -372,7 +372,7 @@ def just_in_time_tail(s: Scenario, contract: SetupContract,
             try:
                 candidate = schedule_setup_stages(candidate_s, contract, machine_sequence,
                                                   max_alternatives=max_alternatives,
-                                                  frozen_bookings=frozen_bookings)
+                                                  frozen_bookings=frozen_bookings, audit=False)
             except ValidationError:
                 return None
             rest = lambda r: sorted((x for x in r.bookings if x.phase_id != pid),
@@ -382,6 +382,11 @@ def just_in_time_tail(s: Scenario, contract: SetupContract,
                     new_metrics.late_orders <= metrics.late_orders and
                     new_metrics.tardiness_seconds <= metrics.tardiness_seconds and
                     new_metrics.setup_seconds <= metrics.setup_seconds):
+                try:   # only a candidate about to be kept pays for the full verification
+                    verify_staged(candidate_s, contract, machine_sequence, candidate,
+                                  frozen_bookings=frozen_bookings)
+                except ValidationError:
+                    return None
                 return candidate_s, candidate, new_metrics, int(delay.total_seconds())
             return None
 
@@ -499,7 +504,7 @@ def backward_setup_before_run(s: Scenario, contract: SetupContract,
                 candidate = schedule_setup_stages(
                     current_s, contract, machine_sequence,
                     max_alternatives=max_alternatives, setup_releases=trial,
-                    frozen_bookings=frozen_bookings)
+                    frozen_bookings=frozen_bookings, audit=False)
             except ValidationError:
                 return None
             rest = lambda r: sorted((x for x in r.bookings
@@ -510,6 +515,11 @@ def backward_setup_before_run(s: Scenario, contract: SetupContract,
                     new_metrics.late_orders <= metrics.late_orders and
                     new_metrics.tardiness_seconds <= metrics.tardiness_seconds and
                     new_metrics.setup_seconds == metrics.setup_seconds):
+                try:   # only a candidate about to be kept pays for the full verification
+                    verify_staged(current_s, contract, machine_sequence, candidate,
+                                  frozen_bookings=frozen_bookings)
+                except ValidationError:
+                    return None
                 return trial, candidate, new_metrics
             return None
 

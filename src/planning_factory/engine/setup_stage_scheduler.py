@@ -66,13 +66,18 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
                           machine_sequence: tuple[str, ...], *,
                           max_alternatives: int = 32,
                           frozen_bookings: tuple[StageBooking, ...] = (),
-                          setup_releases: dict | None = None) -> StagedSetupResult:
+                          setup_releases: dict | None = None,
+                          audit: bool = True) -> StagedSetupResult:
     """Plan real setup and production stages with finite fractional capacity.
 
     The machine order is explicit. A phase's setup may cross a shift boundary
     and start before material arrives; run starts after release/dependencies.
     `setup_releases` (phase id -> earliest setup start) lets a policy keep a
     setup late, e.g. just before its run; it only ever delays a setup.
+    ``audit=False`` skips the plan verifier and the stage-capacity audit (still
+    failing on unscheduled work): only for search loops that call
+    ``verify_staged`` on every candidate they are about to keep. The default
+    always verifies.
     Setup never overlaps the preceding run on the same machine. Fully intact
     one-segment frozen stages can be pinned; partial WIP still fails closed.
     A run with fixed_start is pinned to that instant (setup must
@@ -226,7 +231,7 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
         operations=tuple(sorted(stage_ops, key=lambda o: o.id)),
         settings=Settings(mode='forward'))
     result = plan(stage_scenario)
-    problems = verify_plan(stage_scenario, result)
+    problems = verify_plan(stage_scenario, result) if audit else ()
     if problems or result.unscheduled:
         raise ValidationError(['staged schedule not feasible/audited',
                                *problems, *(f'{u.task_id}: {u.code}' for u in result.unscheduled)])
@@ -237,8 +242,20 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
         booking.append(StageBooking(pid, stage, assignment.segments,
                                     tuple(StageAllocation(d.resource_id, d.units)
                                           for d in assignment.demands)))
-    violations = audit_stage_capacity(contract, s, machine_sequence, tuple(booking),
-                                      frozen_bookings=frozen_bookings)
-    if violations:
-        raise ValidationError(['staged schedule failed independent capacity audit', *violations])
+    if audit:
+        violations = audit_stage_capacity(contract, s, machine_sequence, tuple(booking),
+                                          frozen_bookings=frozen_bookings)
+        if violations:
+            raise ValidationError(['staged schedule failed independent capacity audit', *violations])
     return StagedSetupResult(stage_scenario, result, tuple(booking), tuple(mapping))
+
+
+def verify_staged(s: Scenario, contract: SetupContract, machine_sequence: tuple[str, ...],
+                  staged: StagedSetupResult, *,
+                  frozen_bookings: tuple[StageBooking, ...] = ()) -> None:
+    """Run the checks ``schedule_setup_stages(audit=False)`` skipped; raise if any fails."""
+    problems = verify_plan(staged.scenario, staged.plan)
+    violations = audit_stage_capacity(contract, s, machine_sequence, staged.bookings,
+                                      frozen_bookings=frozen_bookings)
+    if problems or violations:
+        raise ValidationError(['staged schedule failed verification', *problems, *violations])

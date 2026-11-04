@@ -26,7 +26,9 @@ risorse (un limite superiore sicuro: la contesa puo' solo anticiparlo), (2) se g
 spostamento minimo (1 s per il setup, 1 minuto per la lavorazione) disturba le altre
 prenotazioni non si esplorano gli spostamenti intermedi (euristica prudente: al piu' si
 perde uno stringimento, mai la validita'), (3) `scenario_digest` e' memorizzato per
-oggetto (scenario immutabile). Misure: 80 fasi 26 s -> 11,7 s, 160 fasi 123 s -> 33 s,
+oggetto (scenario immutabile), (4) verificatore e audit completo girano solo sui candidati che
+stanno per essere accettati (`schedule_setup_stages(audit=False)` + `verify_staged`); il default
+verifica sempre e i risultati sono identici (stesso hash delle prenotazioni). Misure: 80 fasi 26 s -> 11,7 s, 160 fasi 123 s -> 33 s,
 320 fasi oltre 400 s -> 141 s. Il piano singolo resta sotto 0,35 s a 320 fasi. I risultati
 possono differire leggermente dalla versione precedente (mai peggiori sui KPI, gap
 totale uguale o minore sulle prove). Benchmark riproducibile: `tools/stage_bench.py`.
