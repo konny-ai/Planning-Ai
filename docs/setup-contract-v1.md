@@ -230,5 +230,6 @@ Lo scenario deve essere *run-only* (nessun `setup_seconds` v0.2). Senza
 fasi gia' completate, le scadenze fornitore e gli inizi fissi sono gestiti come
 descritto nel CHANGELOG. `stadi.json` contiene sequenza, prenotazioni, KPI e le
 eventuali violazioni dell'audit indipendente (codice di uscita 2 se non vuote).
-Non scrive mai sugli ingressi e non accede a Factory. La modalita' backward
-non e' supportata.
+Non scrive mai sugli ingressi e non accede a Factory. Con `--backward --scenario-output adj.json` (ADR 005, opzione A) le
+lavorazioni vanno al piu' tardi e ogni attrezzaggio subito prima della sua
+lavorazione; il report include i gap residui.

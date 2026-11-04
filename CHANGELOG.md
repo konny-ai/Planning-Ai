@@ -1,5 +1,14 @@
 # Changelog
 
+## Non rilasciato — modalità backward (ADR 005, opzione A, scelta dal committente)
+
+`backward_setup_before_run` / `setup-stages --backward --scenario-output ...`:
+lavorazioni al più tardi possibile e attrezzaggio subito prima di esse, con
+sequenza macchina fissata prima. Ogni passo è ripianificato e auditato; il report
+dà il gap residuo setup→lavorazione per fase. `schedule_setup_stages` accetta
+`setup_releases` (solo ritardi di setup). Non cambia durate/numero di
+attrezzaggi e non sposta nulla prima del piano in avanti.
+
 ## Non rilasciato — SPERIMENTALE: lavorazioni just-in-time
 
 `just_in_time_tail` / `setup-stages --just-in-time-tail --scenario-output ...`

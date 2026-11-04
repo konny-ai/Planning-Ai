@@ -12,7 +12,7 @@ from planning_factory.domain.setup_contract import load_setup_contract
 from planning_factory.domain.validation import ValidationError
 from planning_factory.engine.setup_capacity import audit_stage_capacity
 from planning_factory.engine.setup_sequence_search import (
-    best_start_sequence, default_machine_sequence, just_in_time_tail,
+    backward_setup_before_run, best_start_sequence, default_machine_sequence, just_in_time_tail,
     optimize_setup_sequence, sequence_metrics, state_grouped_sequence,
 )
 from planning_factory.engine.setup_stage_scheduler import schedule_setup_stages
@@ -118,6 +118,15 @@ class StageFuzzTests(unittest.TestCase):
                 self.assertLessEqual(jit.selected.late_orders, jit.baseline.late_orders)
                 self.assertEqual(jit.selected.setup_seconds, jit.baseline.setup_seconds)
                 delayed_any += bool(jit.delayed)
+                back = backward_setup_before_run(s, contract, best)
+                self.assertEqual(audit_stage_capacity(contract, back.scenario, best,
+                                                      back.solution.bookings), ())
+                self.assertLessEqual(back.selected.tardiness_seconds, back.baseline.tardiness_seconds)
+                self.assertEqual(back.selected.setup_seconds, back.baseline.setup_seconds)
+                forward = {(b.phase_id, b.stage): b for b in
+                           schedule_setup_stages(s, contract, best).bookings}
+                for b in back.solution.bookings:   # nothing is ever pulled earlier
+                    self.assertGreaterEqual(b.segments[0].start, forward[(b.phase_id, b.stage)].segments[0].start)
         self.assertGreater(checked, 20)
         self.assertGreater(delayed_any, 0, 'just-in-time must be exercised, not only skipped')
 

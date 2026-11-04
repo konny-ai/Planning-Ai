@@ -1,9 +1,10 @@
 # ADR 005 — Pianificazione backward con attrezzaggio di fase (PROPOSTA)
 
-**Stato:** proposta, **non approvata**. Nessun codice la implementa: lo scheduler
-a due stadi (`schedule_setup_stages`) continua a rifiutare i task in modalità
-`backward`/`auto`. Questo documento esiste solo per ridurre la scelta del
-committente a una risposta.
+**Stato:** il committente ha scelto l'**opzione A** (04/11/2026). Implementata
+come politica esplicita `backward_setup_before_run` / `setup-stages --backward`
+(vedi sezione finale). Lo scheduler a due stadi continua a rifiutare i task
+in modalità `backward`/`auto` *nello scenario di ingresso*: il backward e' una
+politica applicata al piano, con sequenza macchina fissata prima.
 
 ## Problema
 
@@ -50,3 +51,23 @@ lavorazione fino allo spazio che ha (consegna, successori, lavoro successivo
 sulla macchina), ripianifica e audita, e rifiuta ogni candidato che sposti altre
 fasi o peggiori i KPI. E' opt-in e puo' essere rimosso se il committente sceglie
 A o C. Non sposta mai l'attrezzaggio ne' la sequenza macchina.
+
+## Decisione e implementazione (opzione A)
+
+Scelta del committente: **A** — lavorazione al più tardi possibile e
+attrezzaggio subito prima di essa, sequenza macchina fissata in anticipo.
+
+`planning-factory setup-stages ... --sequence ... --backward --scenario-output adj.json`:
+1. ritarda le lavorazioni dello spazio che hanno (consegna, successori FS/SS con
+   lag, lavoro successivo sulla macchina), come `--just-in-time-tail`;
+2. porta ogni attrezzaggio contro la sua lavorazione alzando il rilascio del
+   solo setup (ricerca per bisezione, secondi interi);
+3. ogni passo e' ripianificato e auditato e tenuto solo se nient'altro si
+   sposta e i KPI non peggiorano. Il report indica per fase il `gap` residuo
+   fra fine setup e inizio lavorazione: e' > 0 quando calendari, pause o
+   la lavorazione precedente sulla macchina impediscono di avvicinarlo.
+
+Non cambia la durata ne' il numero degli attrezzaggi, non sposta mai nulla
+prima del piano in avanti e non accede a Factory. Limite: la sequenza e' un
+dato (non viene ottimizzata in questo passo); i rilasci derivati dei setup sono
+riportati nel report, non nello scenario esportato.

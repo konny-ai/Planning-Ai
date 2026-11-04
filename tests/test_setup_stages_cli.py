@@ -100,6 +100,36 @@ class SetupStagesCliTests(unittest.TestCase):
             self.assertTrue(any(o.release is not None for o in loads(adjusted.read_text(encoding='utf-8')).operations))
             self.assertTrue(all(o.release is None for o in loads(src.read_text(encoding='utf-8')).operations))
 
+    def test_backward_option_a_reports_gaps_and_derived_releases(self):
+        from .helpers import dt
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ops = [op(n, due=dt(day=23, hour=17)) for n in 'abc']
+            src, con = self._files(root, ops)
+            out, adjusted = root / 'stages.json', root / 'adjusted.json'
+            with redirect_stderr(StringIO()):
+                code, _ = run('setup-stages', str(src), str(con), '-o', str(out), '--backward')
+            self.assertNotEqual(code, 0)  # needs --scenario-output
+            code, _ = run('setup-stages', str(src), str(con), '-o', str(out),
+                          '--sequence', 'job:a,job:b,job:c', '--backward', '--scenario-output', str(adjusted))
+            self.assertEqual(code, 0)
+            report = json.loads(out.read_text(encoding='utf-8'))
+            self.assertEqual(report['audit_violations'], [])
+            self.assertEqual(report['backward']['option'], 'A')
+            self.assertTrue(report['backward']['delayed_runs'])
+            self.assertIn('job:a', report['backward']['setup_gaps_seconds'])
+            self.assertEqual(report['kpis']['late_orders'], 0)
+
+    def test_backward_and_just_in_time_are_mutually_exclusive(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src, con = self._files(root)
+            with redirect_stderr(StringIO()) as err:
+                code, _ = run('setup-stages', str(src), str(con), '-o', str(root / 'o.json'),
+                              '--backward', '--just-in-time-tail', '--scenario-output', str(root / 's.json'))
+            self.assertNotEqual(code, 0)
+            self.assertIn('use one of them', err.getvalue())
+
     def test_refuses_to_overwrite_inputs(self):
         with TemporaryDirectory() as tmp:
             src, con = self._files(Path(tmp))

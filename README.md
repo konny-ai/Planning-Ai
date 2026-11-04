@@ -84,7 +84,7 @@ Su Windows con più Python installati: `py -3.13 -m venv .venv`.
 - Nesting atomici multicommessa: durata condivisa e collegamento a tutte le operazioni.
 - Attrezzaggi, lavoro residuo, operazioni interrompibili, inizi e risorse fissati, storico completato.
 - Priorità per lotto, cliente e fase; ordinamento deterministico.
-- Attrezzaggio e lavorazione come **stadi separati** con risorse e percentuali distinte (`planning-factory setup-stages`, [guida](docs/setup-contract-v1.md)): sequenza automatica o scelta, ricerca opzionale, storico, fornitori e inizi fissi, audit indipendente. La modalità *just-in-time* (`--just-in-time-tail`) è **sperimentale** e la modalità backward non è supportata ([ADR 005, proposta](docs/decisions/005-backward-setup-proposta.md)).
+- Attrezzaggio e lavorazione come **stadi separati** con risorse e percentuali distinte (`planning-factory setup-stages`, [guida](docs/setup-contract-v1.md)): sequenza automatica o scelta, ricerca opzionale, storico, fornitori e inizi fissi, audit indipendente. La modalità backward (`--backward`: lavorazione al più tardi, attrezzaggio subito prima, sequenza fissata) segue l'opzione A scelta nell'[ADR 005](docs/decisions/005-backward-setup-proposta.md); `--just-in-time-tail` è la sua prima parte.
 - Ricerca **opzionale** tra politiche di dispatch e ricerca locale a budget limitato (nessuna garanzia di ottimalità globale).
 - Verifica indipendente del piano, diagnostica, carichi, consegne, confronto tra piani, export CSV/HTML/MS Project.
 - Snapshot SQLite con revisioni, what-if, zona congelata tra revisioni.

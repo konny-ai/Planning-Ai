@@ -65,11 +65,14 @@ def _bundles(requirements: tuple[StageRequirement, ...], *, machine_id: str | No
 def schedule_setup_stages(s: Scenario, contract: SetupContract,
                           machine_sequence: tuple[str, ...], *,
                           max_alternatives: int = 32,
-                          frozen_bookings: tuple[StageBooking, ...] = ()) -> StagedSetupResult:
+                          frozen_bookings: tuple[StageBooking, ...] = (),
+                          setup_releases: dict | None = None) -> StagedSetupResult:
     """Plan real setup and production stages with finite fractional capacity.
 
     The machine order is explicit. A phase's setup may cross a shift boundary
     and start before material arrives; run starts after release/dependencies.
+    `setup_releases` (phase id -> earliest setup start) lets a policy keep a
+    setup late, e.g. just before its run; it only ever delays a setup.
     Setup never overlaps the preceding run on the same machine. Fully intact
     one-segment frozen stages can be pinned; partial WIP still fails closed.
     A run with fixed_start is pinned to that instant (setup must
@@ -193,7 +196,8 @@ def schedule_setup_stages(s: Scenario, contract: SetupContract,
             stage_ops.append(Operation(
                 setup_id, f'technical:{pid}', phase.setup_seconds,
                 setup_alts,
-                predecessors=setup_predecessors, release=s.start,
+                predecessors=setup_predecessors,
+                release=max(s.start, (setup_releases or {}).get(pid, s.start)),
                 splittable=(pid, 'setup') not in frozen, mode='forward',
                 priority=task.priority,
                 **stage_pin(pid, 'setup', setup_alts),

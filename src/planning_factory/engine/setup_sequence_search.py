@@ -382,3 +382,91 @@ def just_in_time_tail(s: Scenario, contract: SetupContract,
             rejected.append(pid)
     return JustInTimeResult(current, current_s, baseline, metrics,
                             tuple(delayed), tuple(rejected))
+
+
+@dataclass(frozen=True)
+class BackwardSetupResult:
+    solution: StagedSetupResult
+    scenario: Scenario                       # source scenario with derived run releases
+    setup_releases: tuple[tuple[str, object], ...]  # derived setup releases per phase
+    delayed_runs: tuple[tuple[str, int], ...]
+    setup_gaps: tuple[tuple[str, int], ...]  # seconds between setup end and run start
+    baseline: SequenceMetrics
+    selected: SequenceMetrics
+
+
+def backward_setup_before_run(s: Scenario, contract: SetupContract,
+                              machine_sequence: tuple[str, ...], *,
+                              max_alternatives: int = 32) -> BackwardSetupResult:
+    """ADR 005, option A (chosen by the client): runs as late as possible and
+    every needed setup immediately before its run, with the machine sequence
+    fixed beforehand.
+
+    Step 1 delays runs by the room they have (``just_in_time_tail``). Step 2
+    pushes each setup toward its run by raising the setup's own release; a
+    shift is kept only if the whole plan is re-audited and nothing else moves.
+    Whatever cannot be tightened (calendars, resource contention, the previous
+    run on the machine) is reported as a positive gap rather than hidden.
+    Input scenario and sequence are never modified.
+    """
+    first = just_in_time_tail(s, contract, machine_sequence,
+                              max_alternatives=max_alternatives)
+    current_s, current, metrics = first.scenario, first.solution, first.selected
+    releases = {}
+    for pid in reversed(machine_sequence):
+        for _ in range(1):
+            setup = next((b for b in current.bookings
+                          if b.phase_id == pid and b.stage == 'setup'), None)
+            run = next((b for b in current.bookings
+                        if b.phase_id == pid and b.stage == 'run'), None)
+            if setup is None or run is None:
+                break
+            gap = run.segments[0].start - setup.segments[-1].end
+            if gap.total_seconds() <= 0:
+                break
+            # Latest acceptable setup release by bisection in [0, gap] (whole
+            # seconds): later releases are kept only if the re-audited plan moves
+            # nothing but this setup and the KPIs do not get worse.
+            def attempt(seconds):
+                trial = dict(releases)
+                trial[pid] = setup.segments[0].start + timedelta(seconds=seconds)
+                try:
+                    candidate = schedule_setup_stages(
+                        current_s, contract, machine_sequence,
+                        max_alternatives=max_alternatives, setup_releases=trial)
+                except ValidationError:
+                    return None
+                rest = lambda r: sorted((x for x in r.bookings
+                                         if not (x.phase_id == pid and x.stage == 'setup')),
+                                        key=lambda x: (x.phase_id, x.stage))
+                new_metrics = sequence_metrics(current_s, candidate)
+                if (rest(candidate) == rest(current) and
+                        new_metrics.late_orders <= metrics.late_orders and
+                        new_metrics.tardiness_seconds <= metrics.tardiness_seconds and
+                        new_metrics.setup_seconds == metrics.setup_seconds):
+                    return trial, candidate, new_metrics
+                return None
+
+            low, high, accepted = 0, int(gap.total_seconds()), None
+            full = attempt(high)
+            if full is not None:
+                accepted = full
+            else:
+                while high - low > 1:
+                    mid = (low + high) // 2
+                    found = attempt(mid)
+                    if found is not None:
+                        low, accepted = mid, found
+                    else:
+                        high = mid
+            if not accepted:
+                break
+            releases, current, metrics = accepted
+    gaps = []
+    for pid in machine_sequence:
+        setup = next((b for b in current.bookings if b.phase_id == pid and b.stage == 'setup'), None)
+        run = next((b for b in current.bookings if b.phase_id == pid and b.stage == 'run'), None)
+        if setup is not None and run is not None:
+            gaps.append((pid, int((run.segments[0].start - setup.segments[-1].end).total_seconds())))
+    return BackwardSetupResult(current, current_s, tuple(sorted(releases.items())),
+                               first.delayed, tuple(gaps), first.baseline, metrics)

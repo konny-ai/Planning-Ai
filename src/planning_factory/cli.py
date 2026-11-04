@@ -81,6 +81,8 @@ def main(argv=None) -> int:
     stages.add_argument('--neighbourhood', choices=('swap', 'insertion'), default='swap')
     stages.add_argument('--just-in-time-tail', action='store_true',
                         help='EXPERIMENTAL (ADR 005, not approved): delay terminal runs by their delivery slack; needs --scenario-output')
+    stages.add_argument('--backward', action='store_true',
+                        help='ADR 005 option A: runs as late as possible, each setup right before its run, machine sequence fixed first; needs --scenario-output')
     stages.add_argument('--scenario-output', help='Scenario JSON with the derived releases of --just-in-time-tail')
     stages.add_argument('--budget', type=int, default=24, help='Sequence evaluations, 1..256')
     stages.add_argument('--max-alternatives', type=int, default=32)
@@ -289,7 +291,20 @@ def main(argv=None) -> int:
             else:
                 solution = schedule_setup_stages(scenario, contract, sequence,
                                                  max_alternatives=args.max_alternatives)
-            audit_scenario, jit = scenario, None
+            audit_scenario, jit, back = scenario, None, None
+            if args.backward:
+                from .engine.setup_sequence_search import backward_setup_before_run
+                if args.just_in_time_tail:
+                    raise ValidationError(['--backward already includes --just-in-time-tail: use one of them'])
+                if not args.scenario_output:
+                    raise ValidationError(['--backward requires --scenario-output'])
+                protected = {Path(args.scenario).resolve(), Path(args.contract).resolve(), Path(args.output).resolve()}
+                if Path(args.scenario_output).resolve() in protected:
+                    raise ValidationError(['--scenario-output must be a distinct new file'])
+                back = backward_setup_before_run(scenario, contract, sequence,
+                                                 max_alternatives=args.max_alternatives)
+                solution, audit_scenario = back.solution, back.scenario
+                Path(args.scenario_output).write_text(dumps(audit_scenario), encoding='utf-8')
             if args.just_in_time_tail:
                 from .engine.setup_sequence_search import just_in_time_tail
                 if not args.scenario_output:
@@ -311,6 +326,12 @@ def main(argv=None) -> int:
                 'kpis': sequence_metrics(audit_scenario, solution).as_dict(),
                 'audit_violations': list(violations),
             }
+            if back is not None:
+                report['backward'] = {
+                    'option': 'A', 'delayed_runs': [{'phase_id': p, 'seconds': s} for p, s in back.delayed_runs],
+                    'setup_gaps_seconds': {p: g for p, g in back.setup_gaps},
+                    'setup_releases': {p: r.isoformat() for p, r in back.setup_releases},
+                    'baseline': back.baseline.as_dict()}
             if jit is not None:
                 report['just_in_time_tail'] = {
                     'experimental': True, 'delayed': [{'phase_id': p, 'seconds': s} for p, s in jit.delayed],

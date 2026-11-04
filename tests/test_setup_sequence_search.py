@@ -246,3 +246,45 @@ class JustInTimeTailTests(unittest.TestCase):
         self.assertLessEqual(runs['job:a'].segments[-1].end, runs['job:b'].segments[0].start)
         self.assertEqual(result.selected.late_orders, 0)
         self.assertEqual(audit_stage_capacity(c, result.scenario, seq, result.solution.bookings), ())
+
+
+class BackwardOptionATests(unittest.TestCase):
+    def test_setup_is_pulled_against_its_run_and_runs_are_late(self):
+        from planning_factory.engine.setup_sequence_search import backward_setup_before_run
+        s = base([op('a', due=dt(day=23, hour=17)), op('b', due=dt(day=23, hour=17)),
+                  op('c', due=dt(day=23, hour=17))])
+        c = three()
+        seq = ('job:a', 'job:b', 'job:c')
+        result = backward_setup_before_run(s, c, seq)
+        forward = {(b.phase_id, b.stage): b for b in schedule_setup_stages(s, c, seq).bookings}
+        after = {(b.phase_id, b.stage): b for b in result.solution.bookings}
+        gaps = dict(result.setup_gaps)
+        self.assertTrue(result.delayed_runs)
+        self.assertTrue(any(g == 0 for g in gaps.values()))
+        for pid in ('job:a', 'job:b', 'job:c'):
+            self.assertGreaterEqual(after[(pid, 'run')].segments[0].start,
+                                    forward[(pid, 'run')].segments[0].start)
+        for (pid, stage), b in after.items():
+            if stage == 'setup':
+                self.assertGreaterEqual(b.segments[0].start, forward[(pid, 'setup')].segments[0].start)
+        self.assertEqual(result.selected.late_orders, 0)
+        self.assertEqual(result.selected.setup_seconds, result.baseline.setup_seconds)
+        self.assertEqual(audit_stage_capacity(c, result.scenario, seq, result.solution.bookings), ())
+        self.assertEqual(result, backward_setup_before_run(s, c, seq))
+
+    def test_without_due_dates_runs_stay_and_setups_are_tightened(self):
+        from planning_factory.engine.setup_sequence_search import backward_setup_before_run
+        s = base([op('a'), op('b'), op('c')])
+        c = three()
+        seq = ('job:a', 'job:b', 'job:c')
+        result = backward_setup_before_run(s, c, seq)
+        forward = {(b.phase_id, b.stage): b for b in schedule_setup_stages(s, c, seq).bookings}
+        after = {(b.phase_id, b.stage): b for b in result.solution.bookings}
+        self.assertEqual(result.delayed_runs, ())
+        for pid in seq:
+            self.assertEqual(after[(pid, 'run')], forward[(pid, 'run')])
+        # c's run starts after the lunch break: its setup is pulled to the latest slot
+        self.assertGreater(after[('job:c', 'setup')].segments[0].start,
+                           forward[('job:c', 'setup')].segments[0].start)
+        self.assertEqual(dict(result.setup_gaps)['job:c'], 3600)  # lunch break cannot host a setup
+        self.assertEqual(audit_stage_capacity(c, result.scenario, seq, result.solution.bookings), ())
