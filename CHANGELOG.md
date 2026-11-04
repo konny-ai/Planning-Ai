@@ -41,6 +41,17 @@ guasto silenzioso che la renderebbe inutile e il piano solo piu' lento non passa
 quando un'alternativa non ci sta, e che non superi mai il limite superiore della ricerca (un successore con inizio
 fisso).
 
+## Non rilasciato — test di mutazione dello scheduler a stadi
+
+Stessa misura su `schedule_setup_stages`: da 17 a 32 mutanti su 44 individuati. Coperte le lacune mie (il default
+verifica davvero piano e audit mentre `audit=False` li salta e `verify_staged` li esegue dopo; `setup_releases`
+ritarda davvero l'attrezzaggio e non lo anticipa mai; una lavorazione non interrompibile resta in un solo
+segmento; il lavoro non collocabile fallisce in modo esplicito; le attivita' backward sono rifiutate dallo
+scheduler solo in avanti; lavorazione congelata e inizio fisso si escludono; il token di ripresa viene registrato) e
+le guardie preesistenti (intervallo di `max_alternatives`, doppio conteggio dell'attrezzaggio, coerenza di
+sequenza e contratto, risorse non valide, prenotazioni congelate non valide, attrezzaggio di durata zero). Restano
+codice morto, guardie gia' duplicate dall'audit e confronti di confine equivalenti. Solo test.
+
 ## Non rilasciato — fuzzing dello scenario JSON
 
 Stesso metodo sullo scenario passato a `setup-stages` (2.055 mutazioni di campo): nessuna eccezione

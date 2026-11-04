@@ -439,5 +439,155 @@ class CompletedPredecessorLagTests(unittest.TestCase):
                    if b.phase_id == 'job:b' and b.stage == 'run')
         self.assertEqual(run.segments[0].start, dt(hour=8))
 
+class StagedSchedulerGuardTests(unittest.TestCase):
+    """Found by mutation testing of schedule_setup_stages: these guards had no test."""
+
+    def _contract(self, *names, state='BLUE'):
+        data = spec()
+        data['initial_machine_states'] = {'m': state}
+        data['phases'] = [dict(data['phases'][0], id=f'job:{n}', target_state='BLUE') for n in names]
+        return load_setup_contract(json.dumps(data))
+
+    def test_the_default_verifies_the_plan_and_audit_false_skips_both(self):
+        from unittest import mock
+        from planning_factory.engine import setup_stage_scheduler as module
+        s, c = base([op('a'), op('b')]), self._contract('a', 'b')
+        with mock.patch.object(module, 'verify_plan', wraps=module.verify_plan) as verifier, \
+                mock.patch.object(module, 'audit_stage_capacity', wraps=module.audit_stage_capacity) as audit:
+            schedule_setup_stages(s, c, ('job:a', 'job:b'))
+            self.assertEqual((verifier.call_count, audit.call_count), (1, 1))
+            verifier.reset_mock()
+            audit.reset_mock()
+            fast = schedule_setup_stages(s, c, ('job:a', 'job:b'), audit=False)
+            self.assertEqual((verifier.call_count, audit.call_count), (0, 0))
+            module.verify_staged(s, c, ('job:a', 'job:b'), fast)       # the deferred checks still pass
+            self.assertEqual((verifier.call_count, audit.call_count), (1, 1))
+
+    def test_setup_releases_really_delay_the_setup_and_only_delay_it(self):
+        s = base([op('a')])
+        c = load_setup_contract(json.dumps({**spec(), 'phases': [spec()['phases'][0] | {'id': 'job:a'}]}))
+        free = schedule_setup_stages(s, c, ('job:a',))
+        setup = next(b for b in free.bookings if b.stage == 'setup').segments[0].start
+        later = setup + timedelta(hours=3)
+        held = schedule_setup_stages(s, c, ('job:a',), setup_releases={'job:a': later})
+        self.assertGreaterEqual(next(b for b in held.bookings if b.stage == 'setup').segments[0].start, later)
+        early = schedule_setup_stages(s, c, ('job:a',), setup_releases={'job:a': setup - timedelta(hours=3)})
+        self.assertEqual(early.bookings, free.bookings)             # an earlier release never pulls it forward
+
+    def test_a_non_splittable_run_stays_in_one_segment(self):
+        # 1.5h then a 3h run that cannot be interrupted: it must wait for the afternoon, not span lunch.
+        s = base([op('x', hours=1.5), op('a', hours=3, splittable=False)])
+        result = schedule_setup_stages(s, self._contract('x', 'a'), ('job:x', 'job:a'))
+        run = next(b for b in result.bookings if b.phase_id == 'job:a' and b.stage == 'run')
+        self.assertEqual(len(run.segments), 1)
+        self.assertEqual(audit_stage_capacity(self._contract('x', 'a'), s, ('job:x', 'job:a'), result.bookings), ())
+
+    def test_work_that_cannot_be_placed_fails_closed(self):
+        s = base([op('a', hours=200)], end=dt(day=21, hour=17))
+        with self.assertRaisesRegex(ValidationError, 'not feasible'):
+            schedule_setup_stages(s, self._contract('a'), ('job:a',))
+
+    def test_backward_mode_tasks_are_refused_by_the_forward_only_scheduler(self):
+        s = base([op('a', due=dt(day=23, hour=17), mode='backward')])
+        with self.assertRaisesRegex(ValidationError, 'active, unfixed forward'):
+            schedule_setup_stages(s, self._contract('a'), ('job:a',))
+
+    def test_a_frozen_run_and_a_fixed_start_cannot_both_pin_the_same_phase(self):
+        s = base([op('a', fixed_start=dt(day=20, hour=9))])
+        frozen = StageBooking('job:a', 'run', (Interval(dt(day=20, hour=9), dt(day=20, hour=10)),),
+                              (StageAllocation('m', 10000), StageAllocation('op', 2500)))
+        with self.assertRaisesRegex(ValidationError, 'mutually exclusive'):
+            schedule_setup_stages(s, self._contract('a'), ('job:a',), frozen_bookings=(frozen,))
+
+    def test_the_resume_token_is_recorded_for_incremental_replanning(self):
+        s = base([op('a'), op('b')])
+        result = schedule_setup_stages(s, self._contract('a', 'b'), ('job:a', 'job:b'))
+        self.assertIn('order', result.resume_token)
+        self.assertEqual(result, schedule_setup_stages(s, self._contract('a', 'b'), ('job:a', 'job:b')))   # not part of equality
+
+class StagedSchedulerValidationTests(unittest.TestCase):
+    """Pre-existing validation guards of schedule_setup_stages that mutation testing showed untested."""
+
+    def _c(self, *names, **changes):
+        data = spec()
+        data['phases'] = [dict(data['phases'][0], id=f'job:{n}', **changes) for n in names]
+        return load_setup_contract(json.dumps(data))
+
+    def test_max_alternatives_must_be_an_integer_between_1_and_256(self):
+        s, c = base([op('a')]), self._c('a')
+        for bad in (0, -1, 257, 1.5, '8', None, True):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                schedule_setup_stages(s, c, ('job:a',), max_alternatives=bad)
+        for good in (1, 256):
+            schedule_setup_stages(s, c, ('job:a',), max_alternatives=good)
+
+    def test_static_setup_on_either_operations_or_nestings_would_double_count(self):
+        on_operation = base([op('a', setup_seconds=600), op('b')])
+        with self.assertRaisesRegex(ValidationError, 'double-count'):
+            schedule_setup_stages(on_operation, self._c('a', 'b'), ('job:a', 'job:b'))
+        on_nesting = base([op('a'), op('b')], nestings=(Nesting('n', ('a', 'b'), 3600, setup_seconds=600),))
+        data = spec()
+        data['phases'] = [dict(data['phases'][0], id='nest:n')]
+        with self.assertRaisesRegex(ValidationError, 'double-count'):
+            schedule_setup_stages(on_nesting, load_setup_contract(json.dumps(data)), ('nest:n',))
+
+    def test_sequence_and_contract_must_match_the_planned_tasks_exactly(self):
+        s = base([op('a'), op('b')])
+        for label, contract, sequence in (('sequence misses one', self._c('a', 'b'), ('job:a',)),
+                                          ('sequence repeats one', self._c('a', 'b'), ('job:a', 'job:a')),
+                                          ('sequence has a stranger', self._c('a', 'b'), ('job:a', 'job:b', 'job:z')),
+                                          ('contract misses a phase', self._c('a'), ('job:a', 'job:b')),
+                                          ('contract has a stranger', self._c('a', 'b', 'z'), ('job:a', 'job:b'))):
+            with self.subTest(label=label), self.assertRaisesRegex(ValidationError, 'correspond exactly'):
+                schedule_setup_stages(s, contract, sequence)
+
+    def test_contract_resources_must_exist_with_the_same_kind_and_finite_capacity(self):
+        s = base([op('a')])
+        for label, change in (('unknown resource', lambda d: d['resources'].append({'id': 'ghost', 'kind': 'tool'})),
+                              ('wrong kind', lambda d: d['resources'].__setitem__(1, {'id': 'op', 'kind': 'tool'}))):
+            data = spec()
+            data['phases'] = [dict(data['phases'][0], id='job:a')]
+            change(data)
+            with self.subTest(label=label), self.assertRaises(ValidationError):
+                schedule_setup_stages(s, load_setup_contract(json.dumps(data)), ('job:a',))
+        infinite = scenario([op('a')], resources=(Resource('m', 'work', kind='machine'),
+                                                  Resource('op', 'work', kind='operator', capacity=None),
+                                                  Resource('tool', 'work', kind='tool')))
+        with self.assertRaisesRegex(ValidationError, 'finite resource'):
+            schedule_setup_stages(infinite, self._c('a'), ('job:a',))
+
+    def _frozen(self, phase='job:a', stage='run', start=(20, 9), end=(20, 10), allocations=None):
+        return StageBooking(phase, stage, (Interval(dt(day=start[0], hour=start[1]), dt(day=end[0], hour=end[1])),),
+                            allocations or (StageAllocation('m', 10000), StageAllocation('op', 2500)))
+
+    def test_frozen_bookings_are_validated(self):
+        s, c = base([op('a')]), self._c('a')
+        horizon_start, horizon_end = s.start, s.end
+        cases = {'duplicate': (self._frozen(), self._frozen()),
+                 'unknown phase': (self._frozen(phase='job:zzz'),),
+                 'unknown stage': (self._frozen(stage='weld'),),
+                 'before the horizon': (StageBooking('job:a', 'run', (Interval(horizon_start - timedelta(hours=2),
+                                                                               horizon_start + timedelta(hours=1)),),
+                                                     (StageAllocation('m', 10000), StageAllocation('op', 2500))),),
+                 'after the horizon': (StageBooking('job:a', 'run', (Interval(horizon_end - timedelta(hours=1),
+                                                                              horizon_end + timedelta(hours=1)),),
+                                                    (StageAllocation('m', 10000), StageAllocation('op', 2500))),),
+                 'two segments': (StageBooking('job:a', 'run', (Interval(dt(day=20, hour=9), dt(day=20, hour=10)),
+                                                                Interval(dt(day=20, hour=10), dt(day=20, hour=11))),
+                                               (StageAllocation('m', 10000), StageAllocation('op', 2500))),)}
+        expected = {'duplicate': 'invalid or duplicate', 'unknown phase': 'invalid or duplicate',
+                    'unknown stage': 'invalid or duplicate', 'before the horizon': 'outside current horizon',
+                    'after the horizon': 'outside current horizon', 'two segments': 'one intact segment'}
+        for label, frozen in cases.items():       # the exact guard must fire, not some later check
+            with self.subTest(label=label), self.assertRaisesRegex(ValidationError, expected[label]):
+                schedule_setup_stages(s, c, ('job:a',), frozen_bookings=frozen)
+
+    def test_a_setup_of_zero_seconds_is_not_booked(self):
+        s = base([op('a')])
+        result = schedule_setup_stages(s, self._c('a', setup_seconds=0, target_state='GREEN'), ('job:a',))
+        self.assertEqual({b.stage for b in result.bookings}, {'run'})           # state changes but takes no time
+        timed = schedule_setup_stages(s, self._c('a', target_state='GREEN'), ('job:a',))
+        self.assertEqual({b.stage for b in timed.bookings}, {'setup', 'run'})
+
 if __name__ == '__main__':
     unittest.main()
