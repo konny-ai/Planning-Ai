@@ -1,0 +1,172 @@
+{
+  "calendars": [
+    {
+      "closures": [],
+      "exceptions": [],
+      "holidays": [],
+      "id": "work",
+      "shifts": [
+        {
+          "end": "12:00:00",
+          "start": "08:00:00",
+          "weekday": 0
+        },
+        {
+          "end": "12:00:00",
+          "start": "08:00:00",
+          "weekday": 1
+        },
+        {
+          "end": "12:00:00",
+          "start": "08:00:00",
+          "weekday": 2
+        },
+        {
+          "end": "12:00:00",
+          "start": "08:00:00",
+          "weekday": 3
+        },
+        {
+          "end": "12:00:00",
+          "start": "08:00:00",
+          "weekday": 4
+        },
+        {
+          "end": "17:00:00",
+          "start": "13:00:00",
+          "weekday": 0
+        },
+        {
+          "end": "17:00:00",
+          "start": "13:00:00",
+          "weekday": 1
+        },
+        {
+          "end": "17:00:00",
+          "start": "13:00:00",
+          "weekday": 2
+        },
+        {
+          "end": "17:00:00",
+          "start": "13:00:00",
+          "weekday": 3
+        },
+        {
+          "end": "17:00:00",
+          "start": "13:00:00",
+          "weekday": 4
+        }
+      ],
+      "timezone": "UTC"
+    }
+  ],
+  "end": "2026-10-24T00:00:00Z",
+  "id": "esempio-stadi",
+  "nestings": [],
+  "operations": [
+    {
+      "alternatives": [
+        {
+          "demands": [
+            {
+              "resource_id": "LASER",
+              "units": 1
+            }
+          ]
+        }
+      ],
+      "completed_at": null,
+      "customer_priority": 0,
+      "due": "2026-10-23T17:00:00Z",
+      "duration_seconds": 3600,
+      "fixed_alternative": null,
+      "fixed_start": null,
+      "id": "taglio-a",
+      "mode": null,
+      "order_id": "ORD-taglio-a",
+      "phase_priority": 0,
+      "predecessors": [],
+      "priority": 0,
+      "release": null,
+      "setup_seconds": 0,
+      "splittable": false
+    },
+    {
+      "alternatives": [
+        {
+          "demands": [
+            {
+              "resource_id": "LASER",
+              "units": 1
+            }
+          ]
+        }
+      ],
+      "completed_at": null,
+      "customer_priority": 0,
+      "due": "2026-10-23T17:00:00Z",
+      "duration_seconds": 3600,
+      "fixed_alternative": null,
+      "fixed_start": null,
+      "id": "taglio-b",
+      "mode": null,
+      "order_id": "ORD-taglio-b",
+      "phase_priority": 0,
+      "predecessors": [],
+      "priority": 0,
+      "release": null,
+      "setup_seconds": 0,
+      "splittable": false
+    },
+    {
+      "alternatives": [
+        {
+          "demands": [
+            {
+              "resource_id": "LASER",
+              "units": 1
+            }
+          ]
+        }
+      ],
+      "completed_at": null,
+      "customer_priority": 0,
+      "due": "2026-10-23T17:00:00Z",
+      "duration_seconds": 3600,
+      "fixed_alternative": null,
+      "fixed_start": null,
+      "id": "taglio-c",
+      "mode": null,
+      "order_id": "ORD-taglio-c",
+      "phase_priority": 0,
+      "predecessors": [],
+      "priority": 0,
+      "release": null,
+      "setup_seconds": 0,
+      "splittable": false
+    }
+  ],
+  "resources": [
+    {
+      "calendar_id": "work",
+      "capacity": 1,
+      "id": "LASER",
+      "kind": "machine"
+    },
+    {
+      "calendar_id": "work",
+      "capacity": 1,
+      "id": "OPERATORE",
+      "kind": "operator"
+    }
+  ],
+  "schema_version": 1,
+  "settings": {
+    "auto_backward_days": 10,
+    "customer_weight": 1,
+    "due_weight": 1,
+    "mode": "forward",
+    "priority_weight": 10000
+  },
+  "start": "2026-10-19T00:00:00Z"
+}

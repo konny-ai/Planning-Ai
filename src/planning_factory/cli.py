@@ -108,7 +108,7 @@ def main(argv=None) -> int:
                         help='Optional bounded sequence search for this explicit objective')
     stages.add_argument('--neighbourhood', choices=('swap', 'insertion'), default='swap')
     stages.add_argument('--just-in-time-tail', action='store_true',
-                        help='EXPERIMENTAL (ADR 005, not approved): delay terminal runs by their delivery slack; needs --scenario-output')
+                        help='First part of --backward (ADR 005): delay runs by the room they have, setups stay early; needs --scenario-output')
     stages.add_argument('--backward', action='store_true',
                         help='ADR 005 option A: runs as late as possible, each setup right before its run, machine sequence fixed first; needs --scenario-output')
     stages.add_argument('--task-modes', action='store_true',
@@ -120,7 +120,7 @@ def main(argv=None) -> int:
     stages.add_argument('--no-candidate', default='',
                         help='With --partial: comma-separated operation IDs to treat as having no candidate resource')
     stages.add_argument('--html', help='Offline HTML report of the stage plan (Gantt, gaps, unplanned phases, audit)')
-    stages.add_argument('--scenario-output', help='Scenario JSON with the derived releases of --just-in-time-tail')
+    stages.add_argument('--scenario-output', help='Scenario JSON with the derived run releases of --backward, --just-in-time-tail or --task-modes')
     stages.add_argument('--restarts', type=int, default=0,
                         help='With --objective (forward search): extra deterministic perturbed starts, 0..8; also tries the state-grouped start')
     stages.add_argument('--seed', type=int, default=0, help='Seed of the perturbed starts')

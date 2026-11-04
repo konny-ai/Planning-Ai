@@ -1,5 +1,13 @@
 # Changelog
 
+## Non rilasciato — guida e esempio per la pianificazione a stadi
+
+`docs/guida-pianificazione-a-stadi.md` raccoglie in un solo posto ingressi, sequenza,
+ricerca, backward, replay e fasi senza candidate, con `examples/setup-stages/` (dati
+sintetici). Un test esegue gli stessi comandi e controlla i numeri citati (attrezzaggio
+5.400 s -> 1.800 s). Corretti i testi di aiuto della CLI per `--just-in-time-tail` e
+`--scenario-output`, che dicevano ancora "non approvato".
+
 ## Non rilasciato — ricerca di sequenza con partenze multiple
 
 `optimize_setup_sequence_multistart` / `setup-stages --objective ... --restarts N --seed S`:
