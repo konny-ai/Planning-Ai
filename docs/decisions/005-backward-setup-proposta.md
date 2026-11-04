@@ -1,4 +1,4 @@
-# ADR 004 — Pianificazione backward con attrezzaggio di fase (PROPOSTA)
+# ADR 005 — Pianificazione backward con attrezzaggio di fase (PROPOSTA)
 
 **Stato:** proposta, **non approvata**. Nessun codice la implementa: lo scheduler
 a due stadi (`schedule_setup_stages`) continua a rifiutare i task in modalità
