@@ -14,6 +14,13 @@ esatta con piano completo su 250 scenari casuali, su 150 scenari a stadi e sui c
 completate e inizi fissi; stesso hash delle prenotazioni sulle misure: 80 fasi 11,4 s -> 8,9 s,
 160 fasi 32,3 s -> 22,6 s. Il resto del tempo e' nel calcolo degli intervalli liberi.
 
+## Non rilasciato — fuzz esteso del percorso a stadi
+
+`tests/test_setup_stage_fuzz_extended.py`: scenari casuali a seme fisso su prenotazioni congelate
+(restano identiche o il calcolo fallisce in modo esplicito), fasi non pianificabili (chiusura sui
+successori, nessuna prenotazione per le non pianificate, audit pulito) e modalita' per task
+(piani sempre auditati). Nessun difetto trovato; nessuna modifica di comportamento.
+
 ## Non rilasciato — comando `staged-plan` (materiali + stadi da riga di comando)
 
 `planning-factory staged-plan scenario.json spec.json -o piano.json [--html] [--scenario-output]`
