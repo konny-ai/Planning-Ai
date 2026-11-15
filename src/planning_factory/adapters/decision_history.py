@@ -62,6 +62,11 @@ def risk_estimate(summary, rows, *, min_samples=30):
     'provisional' must never be treated as guaranteed calibration.
     """
     rows = validate_history(rows)
+    if (not isinstance(summary, dict) or any(
+            type(summary.get(k)) not in (int, float) or
+            not math.isfinite(summary.get(k)) or summary.get(k) < 0 for k in FEATURES)):
+        return {"status": "missing_current_features", "sample_count": len(rows),
+                "probability": None}
     if type(min_samples) is not int or not 20 <= min_samples <= 10000:
         raise ValueError("Invalid minimum support")
     if len(rows) < max(min_samples, 50):
