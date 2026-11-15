@@ -101,6 +101,13 @@ class DecisionModelTests(unittest.TestCase):
         self.assertEqual(summary["max_delay_hours"], 2.0)
         self.assertEqual(summary["max_utilization_pct"], 80.0)
 
+    def test_external_hourly_limit_fails_closed(self):
+        from collections import deque
+        with patch.object(dm, "_EXTERNAL_CALLS", deque([2000.0] * 24)):
+            with patch.object(dm.time, "monotonic", return_value=2001.0):
+                with self.assertRaisesRegex(PermissionError, "hourly_limit"):
+                    dm._reserve_external_call()
+
     def test_benchmark_never_calls_provider(self):
         config = {**dm.DEFAULT, "enabled": True, "provider": "baseline"}
         with patch.object(dm, "_http_json", side_effect=AssertionError("network forbidden")):
