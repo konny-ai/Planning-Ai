@@ -630,8 +630,13 @@ def make_secure_handler(app):
                         if report is None:
                             return self.respond(409, {'error': 'Recommendation expired: run comparison again'})
                         source, _ = app.state.calculate()
-                        if scenario_digest(source) != report['scenario_digest']:
-                            return self.respond(409, {'error': 'Scenario changed: run comparison again'})
+                        original_digest = ((report.get('whatif_delta') or {}).get('original_scenario_digest')
+                                           or report['scenario_digest'])
+                        if scenario_digest(source) != original_digest:
+                            return self.respond(409, {'error': 'Source scenario changed: run comparison again'})
+                        from planning_factory.adapters.decision_center import rules_digest
+                        if rules_digest() != report['policy_digest']:
+                            return self.respond(409, {'error': 'Decision rules changed: run comparison again'})
                         result = review_decision(report, data['action'], user[0],
                               expected_digest=data['expected_digest'], note=data['note'],
                               path=app._decision_review_path)
