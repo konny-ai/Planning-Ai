@@ -40,10 +40,13 @@ Le etichette sono `DELIVERY_RISK`, `CAPACITY_REVIEW`, `PLAN_REVIEW`,
 errore di rete non consentono azioni.
 
 La baseline è deterministica e utile per il test del flusso, **non** un
-decision model addestrato. I provider OpenRouter/OpenAI/Anthropic/Ollama
-usano modelli chat JSON, non un endpoint specializzato nativo Decisions.
-ScaleDown Classify e altri protocolli specializzati richiedono adapter
-dedicati e test di contratto prima di essere abilitati.
+decision model addestrato. I provider OpenRouter Chat/OpenAI API/Anthropic/Ollama
+usano modelli chat JSON. In più, **OpenRouter Decisions** usa l’endpoint
+`/api/alpha/decisions` (es. `scaledown/classify-1`) e **OpenAI Decisions**
+usa `/v1/decisions` con `gpt-6-luna`. Le due risposte hanno schemi diversi
+ed entrambi i parser richiedono una scelta tipizzata, rifiutando risposte
+mancanti o rifiuti. Le integrazioni native hanno test di contratto con
+risposte simulate, **non ancora test live con credenziali**.
 
 Gli abbonamenti ChatGPT e Claude non equivalgono ad accesso API a consumo.
 Codex CLI e Claude Code richiedono integrazioni specifiche, autorizzazioni
