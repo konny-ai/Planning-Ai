@@ -89,6 +89,21 @@
 <section class="dc-pane" id="pane-simulations" role="tabpanel" hidden>
 <div class="dc-card"><h2>Confronto delle alternative</h2>
 <p class="dc-muted">Il sistema ricalcola un piano baseline, prova le politiche ammesse e verifica indipendentemente ogni alternativa. Il risultato non viene applicato.</p>
+<details class="dc-card"><summary><strong>Simula un cambiamento produttivo (what-if)</strong></summary>
+<p class="dc-muted">Opzionale: aggiungi un fermo macchina o vincola una lavorazione. I dati originali non vengono modificati.</p>
+<div class="dc-grid">
+<div class="dc-field"><label for="closure-resource">Risorsa da fermare (ID)</label><input id="closure-resource" placeholder="MAC:..." list="dc-resources"><datalist id="dc-resources"></datalist></div>
+<div class="dc-field"><label for="closure-start">Inizio fermo (ISO con fuso)</label><input id="closure-start" placeholder="2026-11-20T08:00:00+01:00"></div>
+<div class="dc-field"><label for="closure-end">Fine fermo (ISO con fuso)</label><input id="closure-end" placeholder="2026-11-20T12:00:00+01:00"></div>
+<div class="dc-field"><label for="closure-reason">Motivo</label><input id="closure-reason" maxlength="160" placeholder="Manutenzione programmata"></div>
+<div class="dc-field"><label for="fixed-task">Task da fissare (ID)</label><input id="fixed-task" placeholder="job:... o nest:..."></div>
+<div class="dc-field"><label for="fixed-start">Avvio task (ISO con fuso)</label><input id="fixed-start" placeholder="2026-11-20T08:00:00+01:00"></div>
+<div class="dc-field"><label for="fixed-alternative">Indice alternativa macchina</label><input id="fixed-alternative" type="number" min="0" max="999" value="0"></div>
+</div>
+<details><summary>Editor avanzato JSON (sostituisce i campi sopra)</summary>
+<div class="dc-field"><label for="whatif-json">Solo fixed_tasks e closures; vedi la guida</label>
+<textarea id="whatif-json" rows="7" spellcheck="false" placeholder='{"fixed_tasks":[],"closures":[]}'></textarea></div></details>
+</details>
 <label class="dc-check"><input id="ai_approved" type="checkbox"> Autorizzo questa specifica analisi AI sugli indicatori aggregati, se prevista dalle regole</label>
 <div class="dc-actions"><button id="run-comparison" class="btn btn-primary" type="button">Genera e confronta i piani</button></div>
 <div id="comparison" aria-live="polite"></div>
