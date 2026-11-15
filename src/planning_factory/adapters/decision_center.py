@@ -37,6 +37,11 @@ DEFAULT_RULES = {
     "local_search_budget": 0, "use_ai_advice": False,
     "risk_threshold_hours": 8, "capacity_threshold_pct": 90,
     "min_historical_samples": 30,
+    "model_routes": {
+        "strategy": {"provider": "inherit", "model": ""},
+        "risk": {"provider": "disabled", "model": ""},
+        "explanation": {"provider": "disabled", "model": ""},
+    },
     "decision_rules": [
         {"name": "consegne_a_rischio", "field": "late_orders",
          "operator": "gte", "value": 1, "profile": "delivery"},
@@ -74,6 +79,17 @@ def check_rules(raw):
             raise ValueError("Invalid bounded policy setting: " + key)
     if type(raw["use_ai_advice"]) is not bool:
         raise ValueError("use_ai_advice must be a boolean")
+    from planning_factory.adapters.decision_model import PROVIDERS
+    routes = raw["model_routes"]
+    if not isinstance(routes, dict) or set(routes) != {"strategy", "risk", "explanation"}:
+        raise ValueError("Decision model routes must specify strategy, risk and explanation")
+    for role, route in routes.items():
+        if not isinstance(route, dict) or set(route) != {"provider", "model"}:
+            raise ValueError("Invalid model route for " + role)
+        if route["provider"] not in (*PROVIDERS, "inherit"):
+            raise ValueError("Unknown provider for " + role)
+        if not isinstance(route["model"], str) or len(route["model"]) > 120:
+            raise ValueError("Invalid model route identifier")
     decision_rules = raw["decision_rules"]
     if not isinstance(decision_rules, list) or len(decision_rules) > 16:
         raise ValueError("Maximum 16 decision rules")
