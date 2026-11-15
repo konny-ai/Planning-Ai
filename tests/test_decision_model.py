@@ -78,7 +78,10 @@ class DecisionModelTests(unittest.TestCase):
         config = {**dm.DEFAULT, "enabled": True, "provider": "baseline"}
         with patch.object(dm, "_http_json", side_effect=AssertionError("network forbidden")):
             result = dm.synthetic_benchmark(config, approved=True)
-        self.assertEqual(result["correct"], 4)
+        self.assertEqual(result["correct"], 10)
+        self.assertEqual(result["count"], 10)
+        self.assertEqual(result["abstentions"], 0)
+        self.assertEqual(result["confusion_matrix"]["DELIVERY_RISK"]["DELIVERY_RISK"], 2)
         self.assertEqual(result["external_calls"], 0)
 
 
