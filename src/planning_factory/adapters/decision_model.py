@@ -142,7 +142,9 @@ def _native_decision(provider, model, key, summary, question):
         response = _http_json("https://openrouter.ai/api/alpha/decisions",
                               {"Authorization": "Bearer " + key},
                               {"model": model, "state": {"text": json.dumps(summary)},
-                               "questions": [question_spec]})
+                               "questions": {"plan_review": {
+                                   "type": "choice", "instructions": prompt,
+                                   "criteria": {item["value"]: item["description"] for item in choices}}}})
         answers = response.get("answers")
         answer = answers.get("plan_review", {}) if isinstance(answers, dict) else {}
     if answer.get("type") != "choice":
