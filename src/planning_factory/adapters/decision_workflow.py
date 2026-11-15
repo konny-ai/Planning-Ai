@@ -54,7 +54,7 @@ def build_recommendation(state, payload):
     if rules["use_ai_advice"] and payload["ai_approved"]:
         from planning_factory.adapters.decision_model import validate_config
         base = get_config()
-        summary = metrics(current)
+        summary = metrics(tentative if whatif is not None else current)
         for role, route in rules["model_routes"].items():
             if route["provider"] == "disabled":
                 continue
