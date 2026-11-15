@@ -89,6 +89,10 @@ function loadRules(rules) {
     if (id === "use_ai_advice") $(id).checked=rules[id];
     else $(id).value=rules[id];
   }
+  for(const role of ["strategy","risk","explanation"]){
+    $("route-"+role+"-provider").value=rules.model_routes[role].provider;
+    $("route-"+role+"-model").value=rules.model_routes[role].model;
+  }
   renderPolicies(rules.policies);
   $("rules-rows").replaceChildren();
   for(const rule of rules.decision_rules) ruleRow(rule);
@@ -108,7 +112,11 @@ function rulesPayload() {
     risk_threshold_hours:Number($("risk_threshold_hours").value),
     capacity_threshold_pct:Number($("capacity_threshold_pct").value),
     min_historical_samples:Number($("min_historical_samples").value),
-    use_ai_advice:$("use_ai_advice").checked,decision_rules:rows};
+    use_ai_advice:$("use_ai_advice").checked,
+    model_routes:Object.fromEntries(["strategy","risk","explanation"].map(role =>
+      [role,{provider:$("route-"+role+"-provider").value,
+             model:$("route-"+role+"-model").value}])),
+    decision_rules:rows};
 }
 function displayJSON(id,value) { const node=$(id);node.hidden=false;node.textContent=JSON.stringify(value,null,2); }
 function whatifPayload() {
@@ -161,6 +169,14 @@ function renderComparison(report) {
     ["Utilizzo massimo",summary.max_resource_utilization_pct === null?"n.d.":summary.max_resource_utilization_pct+" %"]]) {
     const item=add(kpis,document.createElement("div"));item.className="dc-kpi";
     add(item,text("strong",value));add(item,text("span",label));
+  }
+  const modelRoles=report.model_role_results || {};
+  if(Object.keys(modelRoles).length){
+    add(root,text("h3","Modelli utilizzati per ruolo"));
+    const roleList=add(root,document.createElement("ul"));
+    for(const [role,value] of Object.entries(modelRoles))
+      add(roleList,text("li",role+": "+(value.label || value.status)+
+        (value.reason?" — "+value.reason:"")));
   }
   const hist=report.historical_risk;
   add(root,text("p",hist.status==="provisional"?
