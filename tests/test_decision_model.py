@@ -77,6 +77,19 @@ class DecisionModelTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 dm._native_decision("openai_decisions", "gpt-6-luna", "dummy", {}, "")
 
+    def test_plan_metrics_use_actual_plan_contract(self):
+        from types import SimpleNamespace
+        plan = SimpleNamespace(assignments=(object(), object()), unscheduled=(),
+              orders=(SimpleNamespace(tardiness_seconds=7200, complete=True),
+                      SimpleNamespace(tardiness_seconds=None, complete=False)),
+              resources=(SimpleNamespace(utilization=.8),))
+        summary = dm.metrics(plan)
+        self.assertEqual(summary["delivery_count"], 2)
+        self.assertEqual(summary["late_delivery_count"], 1)
+        self.assertEqual(summary["unknown_delivery_count"], 1)
+        self.assertEqual(summary["max_delay_hours"], 2.0)
+        self.assertEqual(summary["max_utilization_pct"], 80.0)
+
     def test_benchmark_never_calls_provider(self):
         config = {**dm.DEFAULT, "enabled": True, "provider": "baseline"}
         with patch.object(dm, "_http_json", side_effect=AssertionError("network forbidden")):
