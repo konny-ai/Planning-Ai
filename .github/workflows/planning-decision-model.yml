@@ -27,7 +27,7 @@ jobs:
         run: |
           python -m compileall -q src/planning_factory/adapters/decision_model.py src/planning_factory/adapters/decision_center.py src/planning_factory/adapters/decision_history.py src/planning_factory/adapters/decision_workflow.py src/planning_factory/adapters/dashboard_api.py src/planning_factory/adapters/secure_dashboard.py
       - name: Decision Center contracts and HTTP integration
-        run: python -m unittest -v tests.test_decision_model tests.test_decision_center tests.test_decision_center_http
+        run: python -m unittest -v tests.test_decision_model tests.test_decision_center tests.test_decision_center_http tests.test_decision_center_security tests.test_decision_model_transport tests.test_decision_center_edge
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
