@@ -163,7 +163,19 @@ def risks(scenario, baseline, rules):
     if utilization and max_pct >= rules["capacity_threshold_pct"]:
         signals.append({"code": "CAPACITY", "severity": "medium",
                         "percent": round(max_pct, 2), "reason": "Risorsa con carico oltre soglia"})
+    # Specific identifiers remain inside the local authenticated planner UI.
+    # They are never passed into provider requests, which receive only metrics().
+    late_orders = sorted((
+        {"order_id": o.order_id, "tardiness_hours": round((o.tardiness_seconds or 0) / 3600, 2),
+         "complete": o.complete}
+        for o in baseline.orders if (o.tardiness_seconds or 0) > 0
+    ), key=lambda o: (-o["tardiness_hours"], o["order_id"]))[:12]
+    bottlenecks = sorted((
+        {"resource_id": r.resource_id, "utilization_pct": round(r.utilization * 100, 2)}
+        for r in baseline.resources if r.utilization is not None and math.isfinite(r.utilization)
+    ), key=lambda item: (-item["utilization_pct"], item["resource_id"]))[:12]
     return {"signals": signals,
+            "late_orders": late_orders, "bottlenecks": bottlenecks,
             "summary": {"late_orders": late, "incomplete_orders": incomplete,
                         "unscheduled_units": len(baseline.unscheduled),
                         "max_delay_hours": round(max_delay, 2),
@@ -300,6 +312,25 @@ def recommend(scenario, rules=None, *, published=None, published_scenario=None, 
         "ai_is_advisory_only": True,
         "historical_risk": history_result,
     }
+    explanations = []
+    if winner_score.policy != "priority":
+        explanations.append("La politica candidata è preferita ai KPI della baseline verificata.")
+    else:
+        explanations.append("Nessuna alternativa valutata migliora gli obiettivi dichiarati rispetto alla baseline.")
+    if winner_score.unscheduled_operations < baseline_score.unscheduled_operations:
+        explanations.append("Diminuiscono le operazioni non programmate.")
+    if winner_score.late_orders < baseline_score.late_orders:
+        explanations.append("Diminuisce il numero delle commesse in ritardo.")
+    if winner_score.total_tardiness_seconds < baseline_score.total_tardiness_seconds:
+        explanations.append("Si riduce il ritardo cumulato delle consegne.")
+    if matched_rule:
+        explanations.append("La tabella decisionale ha selezionato il profilo tramite " + matched_rule + ".")
+    if ai_influenced_profile:
+        explanations.append("Il profilo è suggerito da una classificazione AI; la valutazione dei piani resta deterministica.")
+    if rejected:
+        explanations.append("Non tutti i candidati sono stati valutati; controllare i motivi di esclusione.")
+    report["explanation"] = explanations
+    report["recommendation_type"] = "review_dispatch_or_whatif"
     # The hash is stable across runs for identical inputs and evaluated results.
     report["decision_id"] = _digest({k: v for k, v in report.items() if k != "decision_id"})[:32]
     return report
