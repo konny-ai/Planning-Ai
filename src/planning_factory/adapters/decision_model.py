@@ -67,15 +67,29 @@ def save_config(value):
 
 def metrics(plan):
     """Only coarse aggregates. No customers, orders, machines or operation ids."""
+    delays = [o.tardiness_seconds for o in plan.orders if o.tardiness_seconds is not None]
+    usable = [r.utilization for r in plan.resources
+              if r.utilization is not None and math.isfinite(r.utilization)]
     return {"scheduled_count": len(plan.assignments),
             "unscheduled_count": len(plan.unscheduled),
-            "delivery_count": len(plan.orders)}
+            "delivery_count": len(plan.orders),
+            "late_delivery_count": sum(1 for seconds in delays if seconds > 0),
+            "incomplete_delivery_count": sum(1 for o in plan.orders if not o.complete),
+            "unknown_delivery_count": sum(1 for o in plan.orders if o.tardiness_seconds is None),
+            "max_delay_hours": round(max(delays, default=0) / 3600, 1),
+            "max_utilization_pct": round(100 * max(usable), 1) if usable else None}
 
 
 def baseline(summary):
+    if summary.get("late_delivery_count", 0):
+        return {"label": "DELIVERY_RISK", "confidence": 1.0,
+                "reason": "At least one order is late in the verified plan."}
     if summary["unscheduled_count"]:
         return {"label": "CAPACITY_REVIEW", "confidence": 1.0,
                 "reason": "There are unscheduled planning units."}
+    if summary.get("incomplete_delivery_count", 0):
+        return {"label": "PLAN_REVIEW", "confidence": 1.0,
+                "reason": "At least one order is incomplete."}
     if summary["scheduled_count"] == 0:
         return {"label": "PLAN_REVIEW", "confidence": 1.0,
                 "reason": "No scheduled work was found."}
