@@ -49,6 +49,8 @@ ASSETS = {
     "/app.js": ("app.js", "application/javascript; charset=utf-8"),
     "/data.js": ("data.js", "application/javascript; charset=utf-8"),
     "/styles.css": ("styles.css", "text/css; charset=utf-8"),
+    "/decision-model": ("decision-model.html", "text/html; charset=utf-8"),
+    "/decision-model.js": ("decision-model.js", "application/javascript; charset=utf-8"),
 }
 
 
@@ -689,6 +691,18 @@ def make_handler(state: DashboardState):
             if self.headers.get("Sec-Fetch-Site") not in (None,"none","same-origin"):
                 return self.respond(403, {"error":"cross-origin requests forbidden"})
             route = urlsplit(self.path).path
+            if route == "/api/decision-center/rules":
+                from planning_factory.adapters.decision_center import get_rules
+                try:
+                    return self.respond(200, get_rules())
+                except (OSError, ValueError) as exc:
+                    return self.respond(422, {"error": str(exc)})
+            if route == "/api/decision-model/config":
+                from planning_factory.adapters.decision_model import get_config
+                try:
+                    return self.respond(200, get_config())
+                except (OSError, ValueError) as exc:
+                    return self.respond(422, {"error": str(exc)})
             if route == "/api/health":
                 return self.respond(200, {"status": "ok", "source": "file_only"})
             if route == "/api/bootstrap":
@@ -726,7 +740,8 @@ def make_handler(state: DashboardState):
             if not self._trusted_host():
                 return self.respond(403, {"error":"untrusted host"})
             route = urlsplit(self.path).path
-            if route not in ("/api/recalculate", "/api/simulate", "/api/v03-preview", "/api/explain", "/api/loads", "/api/quality", "/api/delays"):
+            if route not in ("/api/recalculate", "/api/simulate", "/api/v03-preview", "/api/explain", "/api/loads", "/api/quality", "/api/delays", "/api/decision-model/config", "/api/decision-model/evaluate", "/api/decision-model/benchmark",
+                             "/api/decision-center/rules", "/api/decision-center/recommend"):
                 return self.respond(404, {"error": "not found"})
             # Same-origin protection: don't enable credential-free cross-site
             # POST from another web page through loopback.
@@ -756,6 +771,26 @@ def make_handler(state: DashboardState):
                         f"nonfinite request constant {value!r}")))
                 if not isinstance(body, dict):
                     raise ValidationError(["JSON object required"])
+                if route.startswith("/api/decision-center/"):
+                    from planning_factory.adapters.decision_center import (
+                        get_rules, save_rules, recommend)
+                    if route == "/api/decision-center/rules":
+                        return self.respond(200, save_rules(body))
+                    from planning_factory.adapters.decision_workflow import build_recommendation
+                    return self.respond(200, build_recommendation(state, body))
+                if route.startswith("/api/decision-model/"):
+                    from planning_factory.adapters.decision_model import (
+                        get_config, save_config, evaluate, synthetic_benchmark, metrics)
+                    if route == "/api/decision-model/config":
+                        return self.respond(200, save_config(body))
+                    if set(body) != {"approved"} and (route != "/api/decision-model/evaluate" or set(body) != {"approved", "question"}):
+                        raise ValidationError(["expected approved and optional question for evaluation"])
+                    config = get_config()
+                    if route == "/api/decision-model/benchmark":
+                        return self.respond(200, synthetic_benchmark(config, approved=body["approved"]))
+                    _, current_plan = state.calculate()
+                    return self.respond(200, evaluate(config, metrics(current_plan),
+                        question=body.get("question", ""), approved=body["approved"]))
                 if route == "/api/v03-preview":
                     if body:
                         raise ValidationError(["v0.3 preview must not accept browser-supplied data"])

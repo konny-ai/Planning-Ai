@@ -1,5 +1,10 @@
 # Planning Factory
 
+> **Branch sperimentale:** `Planning_Ai_DecisionModel` — aggiunge un
+> Decision Center per configurare provider AI, regole aziendali, strategie
+> di planning, confronti what-if, rischi storici e approvazioni consultive.
+> Il ramo `main` resta separato. Guida: [Decision Center](docs/decision-center.md).
+
 Motore di pianificazione della produzione **a capacità finita**, v0.2.0.
 Pianifica commesse, fasi e nesting condivisi su macchine, operatori e altre
 risorse, e restituisce un piano **verificato in modo indipendente**, con

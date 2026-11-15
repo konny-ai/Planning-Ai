@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#102440"><title>Planning Factory · Decision Center</title>
+<link rel="stylesheet" href="/styles.css"><script defer src="/decision-model.js"></script>
+<style>
+.dc-shell{max-width:1240px;margin:0 auto;padding:24px 26px 70px;color:var(--text,#162941)}
+.dc-back{display:inline-block;margin-bottom:18px;font-size:14px}
+.dc-header{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:start}
+.dc-header h1{margin:.2em 0}.dc-muted{color:#66768a}.dc-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:24px 0}
+.dc-tab{border:1px solid #ccd8e3;background:white;color:#24364c;border-radius:9px;padding:10px 17px;cursor:pointer;font:inherit}
+.dc-tab[aria-selected=true]{background:#102440;color:white;border-color:#102440}
+.dc-pane[hidden]{display:none!important}.dc-card{border:1px solid #dde5eb;background:#fff;padding:24px;border-radius:14px;margin-bottom:18px}
+.dc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.dc-grid label,.dc-field label{display:block;font-weight:600;font-size:13px;margin-bottom:6px}
+.dc-field{min-width:0}.dc-field input,.dc-field select,.dc-field textarea,.dc-grid input,.dc-grid select{width:100%;box-sizing:border-box;max-width:100%;padding:9px;border:1px solid #b9c8d5;border-radius:8px;font:inherit}
+.dc-check{display:flex;align-items:center;gap:9px;margin:12px 0}.dc-check input{width:17px;height:17px}
+.dc-actions{display:flex;gap:9px;flex-wrap:wrap;margin:16px 0}
+.dc-table{width:100%;border-collapse:collapse;font-size:13px}.dc-table td,.dc-table th{padding:9px;border-bottom:1px solid #e2e8ef;text-align:left}
+.dc-table select,.dc-table input{width:100%;min-width:70px;box-sizing:border-box;padding:7px}
+.dc-badge{display:inline-block;border-radius:100px;background:#eaf0f5;padding:6px 11px;font-size:12px}
+.dc-output{white-space:pre-wrap;overflow-wrap:anywhere;background:#f3f6f9;border-radius:10px;padding:13px;font-size:13px}
+.dc-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:9px;margin:13px 0}
+.dc-kpi{padding:13px;background:#f2f6fa;border-radius:10px}.dc-kpi strong{display:block;font-size:19px}
+.dc-policy{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:9px}
+.dc-policy label{padding:10px;border:1px solid #dbe4ed;border-radius:9px}
+.dc-status{min-height:24px;color:#315974;margin:9px 0}.dc-warning{border-left:3px solid #b38035;padding-left:12px}
+.dc-scroll{overflow-x:auto}@media(max-width:650px){.dc-shell{padding:15px}.dc-card{padding:15px}}
+</style></head>
+<body><main class="dc-shell" id="main">
+<a class="dc-back" href="/">← Control Room</a>
+<div class="dc-header"><div><p class="dc-muted">PLANNING FACTORY / CONTROL ROOM</p><h1>Decision Center</h1>
+<p class="dc-muted">Strategie, regole, simulazioni what-if, previsioni e revisione delle proposte.</p></div>
+<span class="dc-badge">Modalità consultiva · nessuna pubblicazione ERP</span></div>
+<nav class="dc-tabs" role="tablist" aria-label="Sezioni Decision Center">
+<button class="dc-tab" data-tab="models" role="tab" aria-selected="true">Modelli AI</button>
+<button class="dc-tab" data-tab="policies" role="tab" aria-selected="false">Regole e politiche</button>
+<button class="dc-tab" data-tab="simulations" role="tab" aria-selected="false">Confronto piani</button>
+<button class="dc-tab" data-tab="reviews" role="tab" aria-selected="false">Revisioni</button>
+</nav>
+<div id="dc-notice" class="dc-status" role="status" aria-live="polite"></div>
+<section class="dc-pane" id="pane-models" role="tabpanel">
+<div class="dc-card"><h2>Provider Decision Model</h2>
+<p class="dc-muted">Questa configurazione riguarda la classificazione consultiva; il ranking dei piani rimane deterministico.</p>
+<form id="decision-form"><div class="dc-grid">
+<div class="dc-field"><label for="provider">Provider</label><select id="provider">
+<option value="disabled">Disattivato</option><option value="baseline">Baseline deterministica</option>
+<option value="local">Ollama / compatibile OpenAI locale</option><option value="local_decisions">System One locale</option>
+<option value="openrouter_decisions">OpenRouter Decisions (ScaleDown)</option><option value="openai_decisions">OpenAI Decisions</option>
+<option value="openrouter">OpenRouter Chat</option><option value="openai">OpenAI API</option><option value="anthropic">Anthropic API</option>
+</select></div>
+<div class="dc-field"><label for="model">ID modello</label><input id="model" maxlength="120" placeholder="es. scaledown/classify-1"></div>
+<div class="dc-field"><label for="endpoint">Endpoint locale (HTTP loopback /v1)</label><input id="endpoint" maxlength="256"></div>
+<div class="dc-field"><label for="threshold">Confidenza minima</label><input id="threshold" type="number" min=".5" max="1" step=".01"></div>
+</div>
+<label class="dc-check"><input id="enabled" type="checkbox"> Abilita classificazione AI</label>
+<label class="dc-check"><input id="external_approved" type="checkbox"> Consenso globale per provider esterni</label>
+<div class="dc-actions"><button class="btn btn-primary" type="submit">Salva modello</button>
+<button id="benchmark" class="btn btn-muted" type="button">Benchmark offline (10 casi)</button></div>
+</form><p class="dc-warning dc-muted">Gli abbonamenti ChatGPT e Claude non equivalgono a credenziali API; i segreti sono letti dall'ambiente del server.</p>
+<pre id="benchmark-result" class="dc-output" hidden></pre>
+</div>
+<div class="dc-card"><h2>Ruoli nel ciclo decisionale</h2><div class="dc-grid">
+<div><strong>Regole</strong><p class="dc-muted">Scelta degli obiettivi aziendali e vincoli consentiti.</p></div>
+<div><strong>Decision Model</strong><p class="dc-muted">Classificazione e suggerimento di un profilo, solo se autorizzato.</p></div>
+<div><strong>Planner</strong><p class="dc-muted">Simula politiche a capacità finita, verifica e confronta.</p></div>
+<div><strong>Storico</strong><p class="dc-muted">Stima esplorativa solo con dati e verifica sufficienti.</p></div>
+</div></div>
+</section>
+<section class="dc-pane" id="pane-policies" role="tabpanel" hidden>
+<div class="dc-card"><h2>Politiche decisionali</h2>
+<p class="dc-muted">Le decisioni sono tipizzate e limitate. La prima politica deve rimanere quella baseline.</p>
+<form id="rules-form"><div class="dc-grid">
+<div class="dc-field"><label for="profile">Obiettivo predefinito</label><select id="profile">
+<option value="balanced">Bilanciamento generale</option><option value="delivery">Riduci ritardi</option><option value="stability">Stabilità del piano</option></select></div>
+<div class="dc-field"><label for="max_candidates">Max politiche da simulare</label><input id="max_candidates" type="number" min="1" max="7"></div>
+<div class="dc-field"><label for="max_seconds">Budget di tempo (s)</label><input id="max_seconds" type="number" min="1" max="120"></div>
+<div class="dc-field"><label for="local_search_budget">Ricerca locale (0–64 prove)</label><input id="local_search_budget" type="number" min="0" max="64"></div>
+<div class="dc-field"><label for="risk_threshold_hours">Soglia ritardo (h)</label><input id="risk_threshold_hours" type="number" min="1" max="720"></div>
+<div class="dc-field"><label for="capacity_threshold_pct">Soglia carico (%)</label><input id="capacity_threshold_pct" type="number" min="1" max="100"></div>
+<div class="dc-field"><label for="min_historical_samples">Campioni storici minimi</label><input id="min_historical_samples" type="number" min="20" max="10000"></div>
+</div>
+<label class="dc-check"><input id="use_ai_advice" type="checkbox"> Consenti al Decision Model di suggerire un profilo (solo con approvazione)</label>
+<h3>Modelli per funzione</h3><p class="dc-muted">Ogni ruolo può ereditare il provider generale oppure usare un modello diverso. Disabilitati per impostazione predefinita, tranne la classificazione strategica ereditata.</p><div class="dc-grid"><div class="dc-card"><div class="dc-field"><label for="route-strategy-provider">Strategia · provider</label><select id="route-strategy-provider"><option value="disabled">Disattivato</option><option value="inherit">Eredita impostazioni AI</option><option value="baseline">Baseline deterministica</option><option value="local">Ollama locale</option><option value="local_decisions">System One locale</option><option value="openrouter_decisions">OpenRouter Decisions</option><option value="openai_decisions">OpenAI Decisions</option><option value="openrouter">OpenRouter Chat</option><option value="openai">OpenAI API</option><option value="anthropic">Anthropic API</option></select></div><div class="dc-field"><label for="route-strategy-model">ID modello dedicato</label><input id="route-strategy-model" maxlength="120" placeholder="Lascia vuoto se erediti"></div></div><div class="dc-card"><div class="dc-field"><label for="route-risk-provider">Classificazione rischio · provider</label><select id="route-risk-provider"><option value="disabled">Disattivato</option><option value="inherit">Eredita impostazioni AI</option><option value="baseline">Baseline deterministica</option><option value="local">Ollama locale</option><option value="local_decisions">System One locale</option><option value="openrouter_decisions">OpenRouter Decisions</option><option value="openai_decisions">OpenAI Decisions</option><option value="openrouter">OpenRouter Chat</option><option value="openai">OpenAI API</option><option value="anthropic">Anthropic API</option></select></div><div class="dc-field"><label for="route-risk-model">ID modello dedicato</label><input id="route-risk-model" maxlength="120" placeholder="Lascia vuoto se erediti"></div></div><div class="dc-card"><div class="dc-field"><label for="route-explanation-provider">Spiegazione · provider</label><select id="route-explanation-provider"><option value="disabled">Disattivato</option><option value="inherit">Eredita impostazioni AI</option><option value="baseline">Baseline deterministica</option><option value="local">Ollama locale</option><option value="local_decisions">System One locale</option><option value="openrouter_decisions">OpenRouter Decisions</option><option value="openai_decisions">OpenAI Decisions</option><option value="openrouter">OpenRouter Chat</option><option value="openai">OpenAI API</option><option value="anthropic">Anthropic API</option></select></div><div class="dc-field"><label for="route-explanation-model">ID modello dedicato</label><input id="route-explanation-model" maxlength="120" placeholder="Lascia vuoto se erediti"></div></div></div><p class="dc-muted">Il ruolo predizione storica usa sempre un dataset locale, senza API. Per chiamate ai modelli esterni serve anche la conferma della singola analisi.</p>
+<h3>Politiche candidate</h3><div id="policies-list" class="dc-policy"></div>
+<h3>Tabella di decisione</h3><p class="dc-muted">Le regole sono applicate in ordine: la prima condizione verificata prevale. Nessun codice eseguibile.</p>
+<div class="dc-scroll"><table class="dc-table"><thead><tr><th>Nome</th><th>Indicatore</th><th>Operatore</th><th>Soglia</th><th>Profilo</th><th></th></tr></thead><tbody id="rules-rows"></tbody></table></div>
+<div class="dc-actions"><button id="add-rule" class="btn btn-muted" type="button">+ Aggiungi regola</button>
+<button class="btn btn-primary" type="submit">Salva politiche</button></div>
+</form></div></section>
+<section class="dc-pane" id="pane-simulations" role="tabpanel" hidden>
+<div class="dc-card"><h2>Confronto delle alternative</h2>
+<p class="dc-muted">Il sistema ricalcola un piano baseline, prova le politiche ammesse e verifica indipendentemente ogni alternativa. Il risultato non viene applicato.</p>
+<details class="dc-card"><summary><strong>Simula un cambiamento produttivo (what-if)</strong></summary>
+<p class="dc-muted">Opzionale: aggiungi un fermo macchina o vincola una lavorazione. I dati originali non vengono modificati.</p>
+<div class="dc-grid">
+<div class="dc-field"><label for="closure-resource">Risorsa da fermare (ID)</label><input id="closure-resource" placeholder="MAC:..." list="dc-resources"><datalist id="dc-resources"></datalist></div>
+<div class="dc-field"><label for="closure-start">Inizio fermo (ISO con fuso)</label><input id="closure-start" placeholder="2026-11-20T08:00:00+01:00"></div>
+<div class="dc-field"><label for="closure-end">Fine fermo (ISO con fuso)</label><input id="closure-end" placeholder="2026-11-20T12:00:00+01:00"></div>
+<div class="dc-field"><label for="closure-reason">Motivo</label><input id="closure-reason" maxlength="160" placeholder="Manutenzione programmata"></div>
+<div class="dc-field"><label for="fixed-task">Task da fissare (ID)</label><input id="fixed-task" placeholder="job:... o nest:..."></div>
+<div class="dc-field"><label for="fixed-start">Avvio task (ISO con fuso)</label><input id="fixed-start" placeholder="2026-11-20T08:00:00+01:00"></div>
+<div class="dc-field"><label for="fixed-alternative">Indice alternativa macchina</label><input id="fixed-alternative" type="number" min="0" max="999" value="0"></div>
+</div>
+<details><summary>Editor avanzato JSON (sostituisce i campi sopra)</summary>
+<div class="dc-field"><label for="whatif-json">Solo fixed_tasks e closures; vedi la guida</label>
+<textarea id="whatif-json" rows="7" spellcheck="false" placeholder='{"fixed_tasks":[],"closures":[]}'></textarea></div></details>
+</details>
+<label class="dc-check"><input id="ai_approved" type="checkbox"> Autorizzo questa specifica analisi AI sugli indicatori aggregati, se prevista dalle regole</label>
+<div class="dc-actions"><button id="run-comparison" class="btn btn-primary" type="button">Genera e confronta i piani</button></div>
+<div id="comparison" aria-live="polite"></div>
+</div></section>
+<section class="dc-pane" id="pane-reviews" role="tabpanel" hidden>
+<div class="dc-card"><h2>Registro revisioni</h2>
+<p class="dc-muted">Le approvazioni sono registrate solo in secure-web: un'approvazione non pubblica né modifica il piano.</p>
+<button id="refresh-reviews" class="btn btn-muted" type="button">Aggiorna registro</button>
+<div id="reviews-result" class="dc-scroll"></div>
+</div></section>
+</main></body></html>
