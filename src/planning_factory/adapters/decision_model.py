@@ -228,19 +228,37 @@ def evaluate(config, summary, *, question="", approved=False):
 
 
 def synthetic_benchmark(config, *, approved=False):
+    """Small synthetic regression suite. No real customer content and no paid calls."""
+    from time import perf_counter
     cases = [
-        ({"scheduled_count": 4, "unscheduled_count": 0, "delivery_count": 1}, "NO_ALERT"),
-        ({"scheduled_count": 5, "unscheduled_count": 2, "delivery_count": 2}, "CAPACITY_REVIEW"),
-        ({"scheduled_count": 0, "unscheduled_count": 0, "delivery_count": 0}, "PLAN_REVIEW"),
-        ({"scheduled_count": 2, "unscheduled_count": 1, "delivery_count": 1}, "CAPACITY_REVIEW"),
+        ({"scheduled_count": 4, "unscheduled_count": 0}, "NO_ALERT"),
+        ({"scheduled_count": 5, "unscheduled_count": 2}, "CAPACITY_REVIEW"),
+        ({"scheduled_count": 0, "unscheduled_count": 0}, "PLAN_REVIEW"),
+        ({"scheduled_count": 2, "unscheduled_count": 1}, "CAPACITY_REVIEW"),
+        ({"scheduled_count": 3, "unscheduled_count": 0, "late_delivery_count": 1}, "DELIVERY_RISK"),
+        ({"scheduled_count": 8, "unscheduled_count": 0, "late_delivery_count": 3}, "DELIVERY_RISK"),
+        ({"scheduled_count": 6, "unscheduled_count": 0, "incomplete_delivery_count": 2}, "PLAN_REVIEW"),
+        ({"scheduled_count": 7, "unscheduled_count": 0, "incomplete_delivery_count": 1}, "PLAN_REVIEW"),
+        ({"scheduled_count": 12, "unscheduled_count": 0}, "NO_ALERT"),
+        ({"scheduled_count": 4, "unscheduled_count": 3}, "CAPACITY_REVIEW"),
     ]
     if config["provider"] not in ("baseline", "disabled"):
-        # No implicit four paid external calls from the UI.
-        return {"status": "not_available", "reason": "Live provider benchmarking requires a separate audited harness"}
+        return {"status": "not_available",
+                "reason": "Live provider benchmarks require a separate approved harness"}
     rows = []
     for summary, expected in cases:
+        started = perf_counter()
         result = evaluate(config, summary, approved=approved)
-        rows.append({"expected": expected, "predicted": result.get("label", "UNCERTAIN")})
+        rows.append({"expected": expected, "predicted": result.get("label", "UNCERTAIN"),
+                     "latency_ms": round((perf_counter() - started) * 1000, 3)})
+    labels = sorted(set([*LABELS, *(r["expected"] for r in rows)]))
+    matrix = {wanted: {found: sum(r["expected"] == wanted and r["predicted"] == found
+                                 for r in rows) for found in labels} for wanted in labels}
+    sorted_latency = sorted(r["latency_ms"] for r in rows)
     return {"status": "synthetic", "count": len(rows),
             "correct": sum(r["expected"] == r["predicted"] for r in rows),
-            "cases": rows, "external_calls": 0}
+            "abstentions": sum(r["predicted"] == "UNCERTAIN" for r in rows),
+            "accuracy": round(sum(r["expected"] == r["predicted"] for r in rows) / len(rows), 3),
+            "latency_p50_ms": sorted_latency[4],
+            "latency_p95_ms": sorted_latency[9],
+            "confusion_matrix": matrix, "cases": rows, "external_calls": 0}
