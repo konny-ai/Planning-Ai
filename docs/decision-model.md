@@ -20,15 +20,16 @@ di dispatch o dati ERP.
 
 Configurazione persistita in
 `~/.planning-factory/decision-model.json` (o `PLANNING_DECISION_CONFIG`),
-fuori dalla cartella Git. Non vengono salvate chiavi. La UI HTTP qui descritta
-è il *workbench demo loopback*, non un servizio multiutente autenticato.
-Non esporre la porta pubblicamente. La UI non è ancora integrata in
-`secure-web`: servono policy ruoli e audit specifici prima dell'uso cliente.
+fuori dalla cartella Git. Non vengono salvate chiavi. La UI funziona sia nel *workbench demo loopback* sia in `secure-web`.
+In `secure-web` la configurazione richiede il ruolo amministratore e le
+analisi richiedono una sessione autorizzata; gli eventi sono aggiunti
+all'audit. I segreti non vengono esposti. Non esporre la porta pubblicamente:
+TLS/proxy e collaudi di sicurezza restano necessari prima dell'uso cliente.
 
 ## Contratto decisionale
 
-L'ingresso al modello contiene soltanto il numero di attività schedulate,
-non schedulate e consegne, insieme a una domanda opzionale digitata
+L'ingresso al modello contiene soltanto metriche aggregate: numero di attività schedulate,
+non schedulate, consegne in ritardo/incomplete, ritardo massimo e carico massimo, insieme a una domanda opzionale digitata
 dall'utente (non immettere informazioni riservate). Nessuna identificazione
 di ordine, cliente o macchina viene inviata automaticamente.
 
@@ -43,7 +44,9 @@ La baseline è deterministica e utile per il test del flusso, **non** un
 decision model addestrato. I provider OpenRouter Chat/OpenAI API/Anthropic/Ollama
 usano modelli chat JSON. In più, **OpenRouter Decisions** usa l’endpoint
 `/api/alpha/decisions` (es. `scaledown/classify-1`) e **OpenAI Decisions**
-usa `/v1/decisions` con `gpt-6-luna`. Le due risposte hanno schemi diversi
+usa `/v1/decisions` con `gpt-6-luna`. Un endpoint **System One locale**
+configurato su loopback `/v1` usa `/v1/systemone` con risposta tipizzata,
+quando il server supporta tale contratto. Le due risposte hanno schemi diversi
 ed entrambi i parser richiedono una scelta tipizzata, rifiutando risposte
 mancanti o rifiuti. Le integrazioni native hanno test di contratto con
 risposte simulate, **non ancora test live con credenziali**.
@@ -74,7 +77,7 @@ python -m unittest discover -s tests -t .
 node --check src/planning_factory/web/decision-model.js
 ```
 
-Il benchmark sintetico offline include quattro casi e non compie chiamate
+Il benchmark sintetico offline include dieci casi e non compie chiamate
 ai provider; non è un'accuratezza statistica su dati produttivi.
 
 ## Roadmap successiva
@@ -83,8 +86,8 @@ ai provider; non è un'accuratezza statistica su dati produttivi.
   astensioni, costo provider e confronto modelli in shadow.
 - Adapter dedicati e versionati per endpoint Decisions specializzati
   (ScaleDown e/o altri, solo dopo verifica API ufficiale).
-- Integrazione autenticata in secure-web con approvazioni, audit e policy
-  multiutente, prima di esporre dati reali.
+- Verifica di sicurezza e UX del nuovo percorso autenticato secure-web,
+  con collaudi dei ruoli, CSRF, audit e policy prima di esporre dati reali.
 - Decision model su scenari what-if comparabili per KPI, senza bypassare il
   verificatore del piano.
 - Solo dopo collaudi su clone e approvazione operativa: suggerimenti di
