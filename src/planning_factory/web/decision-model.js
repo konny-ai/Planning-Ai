@@ -111,9 +111,43 @@ function rulesPayload() {
     use_ai_advice:$("use_ai_advice").checked,decision_rules:rows};
 }
 function displayJSON(id,value) { const node=$(id);node.hidden=false;node.textContent=JSON.stringify(value,null,2); }
+function whatifPayload() {
+  const base={ai_approved:$("ai_approved").checked};
+  const advanced=$("whatif-json").value.trim();
+  if(advanced){
+    const edits=JSON.parse(advanced);
+    return {...base,edits,settings:{}};
+  }
+  const closure=$("closure-resource").value.trim();
+  const fixed=$("fixed-task").value.trim();
+  const edits={fixed_tasks:[],closures:[]};
+  if(closure || $("closure-start").value || $("closure-end").value || $("closure-reason").value){
+    edits.closures.push({resource_id:closure,start:$("closure-start").value.trim(),
+      end:$("closure-end").value.trim(),reason:$("closure-reason").value.trim()});
+  }
+  if(fixed || $("fixed-start").value){
+    edits.fixed_tasks.push({task_id:fixed,start:$("fixed-start").value.trim(),
+      alternative:Number($("fixed-alternative").value)});
+  }
+  return edits.fixed_tasks.length || edits.closures.length ?
+    {...base,edits,settings:{}}:base;
+}
 function renderComparison(report) {
   currentReport = report;
   const root=$("comparison");root.replaceChildren();
+  if(report.whatif_delta){
+    const delta=report.whatif_delta;
+    add(root,text("h3","Impatto del what-if rispetto al piano corrente"));
+    const change=add(root,document.createElement("div"));change.className="dc-kpis";
+    for(const [label,value] of [
+      ["Operazioni modificate",delta.changed_operations],
+      ["Risorse cambiate",delta.resource_changes],
+      ["Ritardo precedente",delta.previous_tardiness_hours+" h"],
+      ["Ritardo simulato",delta.new_tardiness_hours+" h"]]){
+      const box=add(change,document.createElement("div"));box.className="dc-kpi";
+      add(box,text("strong",value));add(box,text("span",label));
+    }
+  }
   add(root,text("h3","Profilo scelto: "+report.profile));
   const note = add(root,text("p", "Decisione: "+report.decision_id+" · "+report.candidate_count+
     " alternative verificate · vincitore "+report.winner_policy, "dc-muted"));
@@ -196,8 +230,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   }));
   $("run-comparison").addEventListener("click",()=>safe(async()=>{
     status("Confronto in esecuzione. Il piano esistente rimane invariato.");
-    const report=await request("/api/decision-center/recommend",
-      {ai_approved:$("ai_approved").checked});
+    const report=await request("/api/decision-center/recommend",whatifPayload());
     renderComparison(report);status("Confronto completato. Tutti i candidati mostrati sono verificati.");
   }));
   $("refresh-reviews").addEventListener("click",()=>safe(async()=>{
