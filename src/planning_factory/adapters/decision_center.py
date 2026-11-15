@@ -37,6 +37,12 @@ DEFAULT_RULES = {
     "local_search_budget": 0, "use_ai_advice": False,
     "risk_threshold_hours": 8, "capacity_threshold_pct": 90,
     "min_historical_samples": 30,
+    "decision_rules": [
+        {"name": "consegne_a_rischio", "field": "late_orders",
+         "operator": "gte", "value": 1, "profile": "delivery"},
+        {"name": "carichi_elevati", "field": "max_resource_utilization_pct",
+         "operator": "gte", "value": 90, "profile": "balanced"},
+    ],
 }
 _LOCK = threading.Lock()
 REVIEW_STATES = ("pending", "approved", "rejected")
@@ -68,6 +74,25 @@ def check_rules(raw):
             raise ValueError("Invalid bounded policy setting: " + key)
     if type(raw["use_ai_advice"]) is not bool:
         raise ValueError("use_ai_advice must be a boolean")
+    decision_rules = raw["decision_rules"]
+    if not isinstance(decision_rules, list) or len(decision_rules) > 16:
+        raise ValueError("Maximum 16 decision rules")
+    seen = set()
+    for rule in decision_rules:
+        if not isinstance(rule, dict) or set(rule) != {"name", "field", "operator", "value", "profile"}:
+            raise ValueError("Invalid typed decision rule")
+        if not isinstance(rule["name"], str) or not 1 <= len(rule["name"]) <= 60 or rule["name"] in seen:
+            raise ValueError("Duplicate or invalid decision rule")
+        seen.add(rule["name"])
+        if rule["field"] not in ("late_orders", "incomplete_orders", "unscheduled_units",
+                                 "max_delay_hours", "max_resource_utilization_pct"):
+            raise ValueError("Unknown decision rule field")
+        if rule["operator"] not in ("gte", "lte", "eq"):
+            raise ValueError("Invalid comparison operator")
+        if type(rule["value"]) not in (float, int) or not math.isfinite(rule["value"]) or not 0 <= rule["value"] <= 100000:
+            raise ValueError("Rule threshold out of range")
+        if rule["profile"] not in POLICY_PROFILES:
+            raise ValueError("Unknown decision profile in rule")
     return json.loads(json.dumps(raw))
 
 
@@ -130,6 +155,20 @@ def risks(scenario, baseline, rules):
             "source": "verified_plan", "probabilities_available": False}
 
 
+def select_profile(risk_summary, rules):
+    """Ordered, auditable DMN-like decision table; first matching row wins."""
+    for rule in rules["decision_rules"]:
+        value = risk_summary.get(rule["field"])
+        if type(value) not in (int, float) or not math.isfinite(value):
+            continue  # unknown is never treated as zero
+        operators = {"gte": value >= rule["value"],
+                     "lte": value <= rule["value"],
+                     "eq": value == rule["value"]}
+        if operators[rule["operator"]]:
+            return rule["profile"], rule["name"]
+    return rules["profile"], None
+
+
 def _objectives(profile, published):
     if profile == "stability" and published is not None:
         return ("unscheduled_operations", "late_orders", "moved_operations",
@@ -161,7 +200,9 @@ def recommend(scenario, rules=None, *, published=None, ai_advice=None):
     if base_errors:
         raise ValueError("Baseline invalid: " + "; ".join(base_errors))
     basis = published if published is not None else base
-    objectives = _objectives(rules["profile"], published)
+    baseline_risks = risks(scenario, base, rules)
+    selected_profile, matched_rule = select_profile(baseline_risks["summary"], rules)
+    objectives = _objectives(selected_profile, published)
     candidates = []
     rejected = []
     winner_plan = base
@@ -209,13 +250,14 @@ def recommend(scenario, rules=None, *, published=None, ai_advice=None):
         raise ValueError("Invalid AI advisory result")
     report = {
         "schema_version": 1, "scenario_digest": scenario_digest(scenario),
-        "policy_digest": _digest(rules), "profile": rules["profile"],
+        "policy_digest": _digest(rules), "profile": selected_profile,
+        "matched_rule": matched_rule,
         "objectives": list(objectives), "candidate_count": len(candidates),
         "candidates": candidates, "rejected": rejected,
         "winner_policy": "local_search" if winner_score.policy.startswith("local_swap:") else winner_score.policy,
         "winner": _metrics_data(winner_score),
         "baseline": _metrics_data(baseline_score),
-        "risk": risks(scenario, base, rules),
+        "risk": baseline_risks,
         "verified": True, "requires_review": True, "authorizes_execution": False,
         "can_commit_to_erp": False, "published_plan_changed": False,
         "ai_advice": ai_advice if rules["use_ai_advice"] else None,
@@ -227,7 +269,9 @@ def recommend(scenario, rules=None, *, published=None, ai_advice=None):
     return report
 
 
-def record_path():
+def record_path(custom_path=None):
+    if custom_path is not None:
+        return Path(custom_path).expanduser()
     return Path(os.environ.get("PLANNING_DECISION_REVIEWS",
                  str(Path.home() / ".planning-factory" / "decision-reviews.json"))).expanduser()
 
@@ -241,7 +285,7 @@ def _read_reviews(path):
     return data
 
 
-def review_decision(report, action, actor, *, expected_digest, note=""):
+def review_decision(report, action, actor, *, expected_digest, note="", path=None):
     """Record review only. Approving a recommendation never applies its plan."""
     if action not in ("approve", "reject") or not isinstance(actor, str) or not actor.strip():
         raise ValueError("Invalid review actor or action")
@@ -249,7 +293,7 @@ def review_decision(report, action, actor, *, expected_digest, note=""):
         raise ValueError("Review note exceeds 500 characters")
     if expected_digest != report["scenario_digest"]:
         raise ValueError("Scenario changed; recalculate before reviewing")
-    path = record_path()
+    path = record_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with _LOCK:
         state = _read_reviews(path)
@@ -277,5 +321,5 @@ def review_decision(report, action, actor, *, expected_digest, note=""):
         return result
 
 
-def list_reviews():
-    return list(_read_reviews(record_path())["reviews"].values())[-100:]
+def list_reviews(path=None):
+    return list(_read_reviews(record_path(path))["reviews"].values())[-100:]
