@@ -35,3 +35,19 @@ jobs:
         run: node --check src/planning_factory/web/decision-model.js
       - name: Full planning regression suite
         run: python -m unittest discover -s tests -t .
+  decision-center-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install planning package
+        run: python -m pip install -e .
+      - name: Decision Center regression, security, and concurrency
+        run: python -m unittest -v tests.test_decision_model tests.test_decision_center tests.test_decision_center_http tests.test_decision_center_security tests.test_decision_model_transport tests.test_decision_center_edge
+      - name: Schema compatibility
+        run: python tools/generate_schema.py --check
+      - name: Package wheel including Decision Center assets
+        run: python -m pip wheel --no-deps --wheel-dir dist/wheel .
