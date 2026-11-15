@@ -87,6 +87,8 @@ class SecureDashboard:
             from planning_factory.adapters.factory_workbook_sync import FactoryWorkbookSync
             self.factory_sync=FactoryWorkbookSync(Path(store).parent,state,self._after_factory_sync)
         self.sessions = {}
+        self._decision_reports = {}  # server-issued only, never accept proposal details from browser
+        self._decision_review_path = Path(store).parent / 'decision-reviews.json'
         self.evidence = {}
         self.lock = threading.Lock()
 
@@ -478,6 +480,14 @@ def make_secure_handler(app):
             if not user:
                 return
             try:
+                if path == '/api/decision-center/rules':
+                    if ROLES[user[1]] < ROLES['admin']:
+                        return self.respond(403, {'error': 'role admin required'})
+                    from planning_factory.adapters.decision_center import get_rules
+                    return self.respond(200, get_rules())
+                if path == '/api/decision-center/reviews':
+                    from planning_factory.adapters.decision_center import list_reviews
+                    return self.respond(200, {'reviews': list_reviews(app._decision_review_path)})
                 if path == '/api/decision-model/config':
                     if ROLES[user[1]] < ROLES['admin']:
                         return self.respond(403, {'error': 'role admin required'})
@@ -578,7 +588,7 @@ def make_secure_handler(app):
                 self.end_headers()
                 self.wfile.write(content)
                 return
-            user = self._user('admin' if path.startswith(('/api/settings/','/api/factory-source/')) or path == '/api/decision-model/config' else
+            user = self._user('admin' if path.startswith(('/api/settings/','/api/factory-source/')) or path in ('/api/decision-model/config', '/api/decision-center/rules') else
                               'reparto' if path in ('/api/logout', '/api/assistant', '/api/explain', '/api/loads', '/api/quality', '/api/delays') else 'planner')
             if not user:
                 return
@@ -588,6 +598,52 @@ def make_secure_handler(app):
                 if app.state.workbook_input is not None and path.startswith('/api/rules'):
                     from planning_factory.adapters.workbook_workspace import edit_in_excel
                     edit_in_excel()
+                if path.startswith('/api/decision-center/'):
+                    from planning_factory.adapters.decision_center import (
+                        get_rules, save_rules, recommend, review_decision)
+                    data = self._body()
+                    if path == '/api/decision-center/rules':
+                        result = save_rules(data)
+                        app.audit(user, 'decision_center_rules', 200, policy_digest=result['profile'])
+                        return self.respond(200, result)
+                    if path == '/api/decision-center/recommend':
+                        if set(data) != {'ai_approved'} or type(data['ai_approved']) is not bool:
+                            raise ValidationError(['boolean ai_approved required'])
+                        rules = get_rules()
+                        scenario, current_plan = app.state.calculate()
+                        advice = None
+                        if rules['use_ai_advice'] and data['ai_approved']:
+                            from planning_factory.adapters.decision_model import get_config, evaluate, metrics
+                            advice = evaluate(get_config(), metrics(current_plan), approved=True)
+                        report = recommend(scenario, rules, ai_advice=advice)
+                        with app.lock:
+                            app._decision_reports[report['decision_id']] = report
+                            while len(app._decision_reports) > 48:
+                                app._decision_reports.pop(next(iter(app._decision_reports)))
+                        app.audit(user, 'decision_center_recommend', 200,
+                                  decision_id=report['decision_id'],
+                                  scenario_digest=report['scenario_digest'],
+                                  ai_used=advice is not None)
+                        return self.respond(200, report)
+                    if path == '/api/decision-center/review':
+                        if set(data) != {'decision_id', 'expected_digest', 'action', 'note'}:
+                            raise ValidationError(['decision_id, expected_digest, action and note required'])
+                        if type(data['decision_id']) is not str or len(data['decision_id']) != 32:
+                            raise ValidationError(['invalid decision identifier'])
+                        with app.lock:
+                            report = app._decision_reports.get(data['decision_id'])
+                        if report is None:
+                            return self.respond(409, {'error': 'Recommendation expired: run comparison again'})
+                        source, _ = app.state.calculate()
+                        if scenario_digest(source) != report['scenario_digest']:
+                            return self.respond(409, {'error': 'Scenario changed: run comparison again'})
+                        result = review_decision(report, data['action'], user[0],
+                              expected_digest=data['expected_digest'], note=data['note'],
+                              path=app._decision_review_path)
+                        app.audit(user, 'decision_center_review', 200,
+                                  decision_id=report['decision_id'], review=result['status'])
+                        return self.respond(200, result)
+                    return self.respond(404, {'error': 'unknown decision-center operation'})
                 if path.startswith('/api/decision-model/'):
                     from planning_factory.adapters.decision_model import (
                         get_config, save_config, evaluate, metrics, synthetic_benchmark)
