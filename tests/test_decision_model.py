@@ -72,6 +72,17 @@ class DecisionModelTests(unittest.TestCase):
         self.assertEqual(payload["questions"]["plan_review"]["type"], "choice")
         self.assertIn("CAPACITY_REVIEW", payload["questions"]["plan_review"]["criteria"])
 
+    def test_local_system_one_response(self):
+        response = {"data": {"result": {"answers": {
+            "plan_review": {"type": "choice", "choice": "NO_ALERT", "confidence": .95}}}}}
+        with patch.object(dm, "_http_json", return_value=response) as call:
+            result = dm._native_decision("local_decisions", "local-model", "",
+                                        {"scheduled_count": 5}, "",
+                                        "http://127.0.0.1:11434/v1")
+        self.assertEqual(result["label"], "NO_ALERT")
+        self.assertEqual(call.call_args.args[0],
+                         "http://127.0.0.1:11434/v1/systemone")
+
     def test_native_refusal_is_failure(self):
         with patch.object(dm, "_http_json", return_value={"answers": [{"type": "refusal"}]}):
             with self.assertRaises(ValueError):
