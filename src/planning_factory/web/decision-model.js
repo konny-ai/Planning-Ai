@@ -188,6 +188,21 @@ function renderComparison(report) {
     const list=add(root,document.createElement("ul"));
     for(const signal of report.risk.signals) add(list,text("li",signal.code+": "+signal.reason));
   }
+  add(root,text("h3","Motivazione della raccomandazione"));
+  const rationale=add(root,document.createElement("ul"));
+  for(const item of report.explanation || []) add(rationale,text("li",item));
+  if(report.risk.late_orders && report.risk.late_orders.length){
+    add(root,text("h3","Commesse a rischio di ritardo (solo vista locale)"));
+    const lateList=add(root,document.createElement("ul"));
+    for(const item of report.risk.late_orders)
+      add(lateList,text("li",item.order_id+" — ritardo "+item.tardiness_hours+" h"));
+  }
+  if(report.risk.bottlenecks && report.risk.bottlenecks.length){
+    add(root,text("h3","Risorse più cariche (solo vista locale)"));
+    const bottlenecks=add(root,document.createElement("ul"));
+    for(const item of report.risk.bottlenecks.slice(0,6))
+      add(bottlenecks,text("li",item.resource_id+" — utilizzo "+item.utilization_pct+" %"));
+  }
   add(root,text("h3","Piani candidati verificati"));
   const scroll=add(root,document.createElement("div"));scroll.className="dc-scroll";
   const table=add(scroll,document.createElement("table"));table.className="dc-table";
