@@ -5,7 +5,9 @@ Scenario from trusted files; neither the model nor browser may provide plans.
 """
 from __future__ import annotations
 
-from planning_factory.adapters.dashboard_api import apply_settings
+import threading
+
+from planning_factory.adapters.dashboard_api import apply_settings, PlannerBusyError
 from planning_factory.adapters.dashboard_simulation import apply_whatif_edits
 from planning_factory.adapters.decision_center import get_rules, recommend
 from planning_factory.adapters.decision_model import evaluate, get_config, metrics
@@ -16,7 +18,20 @@ from planning_factory.engine.simulation import compare
 from planning_factory.engine.verification import verify_plan
 
 
+_WORK_SLOT = threading.BoundedSemaphore(1)
+
+
 def build_recommendation(state, payload):
+    """Allow just one bounded decision search at a time per local process."""
+    if not _WORK_SLOT.acquire(blocking=False):
+        raise PlannerBusyError("Decision Center already computing another comparison")
+    try:
+        return _build_recommendation(state, payload)
+    finally:
+        _WORK_SLOT.release()
+
+
+def _build_recommendation(state, payload):
     """Produce recommendations under current server data without storing changes."""
     if not isinstance(payload, dict) or set(payload) not in (
         {"ai_approved"}, {"ai_approved", "edits", "settings"}
