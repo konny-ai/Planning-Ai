@@ -50,9 +50,26 @@ def build_recommendation(state, payload):
             "new_tardiness_hours": round(difference["after_tardiness_seconds"] / 3600, 2),
             "simulation_only": True, "source_modified": False,
         }
-    advice = None
+    role_results = {}
     if rules["use_ai_advice"] and payload["ai_approved"]:
-        advice = evaluate(get_config(), metrics(current), approved=True)
-    result = recommend(scenario, rules, ai_advice=advice)
+        from planning_factory.adapters.decision_model import validate_config
+        base = get_config()
+        summary = metrics(current)
+        for role, route in rules["model_routes"].items():
+            if route["provider"] == "disabled":
+                continue
+            config = dict(base)
+            if route["provider"] != "inherit":
+                config["provider"] = route["provider"]
+                config["model"] = route["model"]
+            config["enabled"] = True
+            config = validate_config(config)
+            role_results[role] = evaluate(config, summary,
+                question={"strategy": "Which business objective profile needs review?",
+                          "risk": "Classify the principal production risk.",
+                          "explanation": "Explain the classification concisely with the supplied aggregates."
+                         }[role], approved=True)
+    result = recommend(scenario, rules, ai_advice=role_results.get("strategy"))
+    result["model_role_results"] = role_results
     result["whatif_delta"] = whatif
     return result
