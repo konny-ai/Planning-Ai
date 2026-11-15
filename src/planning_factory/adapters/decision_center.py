@@ -201,15 +201,17 @@ def _metrics_data(item):
             "moved_operations": item.moved_operations}
 
 
-def recommend(scenario, rules=None, *, published=None, ai_advice=None):
+def recommend(scenario, rules=None, *, published=None, published_scenario=None, ai_advice=None):
     """Evaluate a strictly bounded set of independently verified alternatives.
 
     The caller provides only a trusted, server-side Scenario, never planner
     edits from a browser. No plan is applied and no ERP operation is possible.
     """
     rules = check_rules(rules if rules is not None else get_rules())
-    if published is not None and verify_plan(scenario, published):
-        raise ValueError("Published baseline does not verify against this Scenario")
+    if published is not None:
+        reference_scenario = published_scenario if published_scenario is not None else scenario
+        if verify_plan(reference_scenario, published):
+            raise ValueError("Reference plan does not verify against its source Scenario")
     started = time.monotonic()
     base = plan(scenario)
     base_errors = verify_plan(scenario, base)
@@ -281,6 +283,9 @@ def recommend(scenario, rules=None, *, published=None, ai_advice=None):
     report = {
         "schema_version": 1, "scenario_digest": scenario_digest(scenario),
         "policy_digest": _digest(rules), "profile": selected_profile,
+        "reference_scenario_digest": scenario_digest(published_scenario if published_scenario is not None else scenario)
+            if published is not None else None,
+        "reference_type": "current_verified_plan" if published is not None else "generated_baseline",
         "matched_rule": matched_rule,
         "ai_influenced_profile": ai_influenced_profile,
         "objectives": list(objectives), "candidate_count": len(candidates),
