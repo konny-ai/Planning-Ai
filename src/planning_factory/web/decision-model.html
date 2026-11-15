@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="it">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Planning Factory · Decision Model</title><link rel="stylesheet" href="/styles.css">
+<script defer src="/decision-model.js"></script></head>
+<body><main class="main" style="max-width:980px;margin:2rem auto;padding:1.5rem">
+<p><a href="/">← Torna alla Control Room</a></p>
+<h1>Decision Model</h1>
+<p>Analisi consultiva del piano verificato. Il modello non modifica pianificazione o dati ERP.</p>
+<section class="summary-section" style="padding:1.5rem">
+<form id="decision-form">
+<p><label><input id="enabled" type="checkbox"> Abilita Decision Model (disattivato inizialmente)</label></p>
+<p><label for="provider">Provider</label><br><select id="provider">
+<option value="disabled">Disattivato</option><option value="baseline">Baseline locale deterministica (senza AI)</option>
+<option value="local">Ollama / OpenAI-compatible locale</option><option value="openrouter">OpenRouter Chat</option>
+<option value="openai">OpenAI API</option><option value="anthropic">Anthropic API</option></select></p>
+<p><label for="model">Identificativo modello</label><br><input id="model" maxlength="120" placeholder="Modello disponibile presso il provider" size="46"></p>
+<p><label for="endpoint">Endpoint locale (solo loopback /v1)</label><br><input id="endpoint" size="46" value="http://127.0.0.1:11434/v1"></p>
+<p><label for="threshold">Soglia di confidenza (0.50–1.00)</label><br><input id="threshold" type="number" min=".5" max="1" step=".01" value=".75"></p>
+<p><label><input id="external_approved" type="checkbox"> Autorizzo l'uso di provider esterni (le credenziali restano nell'ambiente del server)</label></p>
+<button class="btn btn-primary" type="submit">Salva configurazione</button>
+</form></section>
+<section class="summary-section" style="padding:1.5rem;margin-top:1rem">
+<h2>Analisi in modalità shadow</h2>
+<p>Il server trasmette solo conteggi aggregati e una domanda opzionale, mai codici commessa o dati personali. Il riepilogo di un piano non pubblicato rimane consultivo.</p>
+<p><label for="question">Domanda facoltativa (non inserire dati riservati)</label><br><input id="question" maxlength="500" size="60" placeholder="Quale criticità suggerisci di verificare?"></p>
+<p><label><input id="approved" type="checkbox"> Confermo l'utilizzo dei soli indicatori aggregati per questa analisi</label></p>
+<button id="analyze" class="btn btn-primary" type="button">Analizza piano</button>
+<button id="benchmark" class="btn btn-muted" type="button">Benchmark sintetico offline</button>
+<h3>Risultato</h3><pre id="result" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+</section>
+<p>Le API ChatGPT e Claude sono distinte dagli abbonamenti consumer. Per i client in abbonamento serve una integrazione autorizzata e verificata: non è implementata qui.</p>
+</main></body></html>
