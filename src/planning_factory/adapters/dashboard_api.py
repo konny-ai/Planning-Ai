@@ -691,6 +691,12 @@ def make_handler(state: DashboardState):
             if self.headers.get("Sec-Fetch-Site") not in (None,"none","same-origin"):
                 return self.respond(403, {"error":"cross-origin requests forbidden"})
             route = urlsplit(self.path).path
+            if route == "/api/decision-center/rules":
+                from planning_factory.adapters.decision_center import get_rules
+                try:
+                    return self.respond(200, get_rules())
+                except (OSError, ValueError) as exc:
+                    return self.respond(422, {"error": str(exc)})
             if route == "/api/decision-model/config":
                 from planning_factory.adapters.decision_model import get_config
                 try:
@@ -734,7 +740,8 @@ def make_handler(state: DashboardState):
             if not self._trusted_host():
                 return self.respond(403, {"error":"untrusted host"})
             route = urlsplit(self.path).path
-            if route not in ("/api/recalculate", "/api/simulate", "/api/v03-preview", "/api/explain", "/api/loads", "/api/quality", "/api/delays", "/api/decision-model/config", "/api/decision-model/evaluate", "/api/decision-model/benchmark"):
+            if route not in ("/api/recalculate", "/api/simulate", "/api/v03-preview", "/api/explain", "/api/loads", "/api/quality", "/api/delays", "/api/decision-model/config", "/api/decision-model/evaluate", "/api/decision-model/benchmark",
+                             "/api/decision-center/rules", "/api/decision-center/recommend"):
                 return self.respond(404, {"error": "not found"})
             # Same-origin protection: don't enable credential-free cross-site
             # POST from another web page through loopback.
@@ -764,6 +771,20 @@ def make_handler(state: DashboardState):
                         f"nonfinite request constant {value!r}")))
                 if not isinstance(body, dict):
                     raise ValidationError(["JSON object required"])
+                if route.startswith("/api/decision-center/"):
+                    from planning_factory.adapters.decision_center import (
+                        get_rules, save_rules, recommend)
+                    if route == "/api/decision-center/rules":
+                        return self.respond(200, save_rules(body))
+                    if set(body) != {"ai_approved"} or type(body["ai_approved"]) is not bool:
+                        raise ValidationError(["expected a boolean ai_approved"])
+                    rules = get_rules()
+                    scenario, current_plan = state.calculate()
+                    advice = None
+                    if rules["use_ai_advice"] and body["ai_approved"]:
+                        from planning_factory.adapters.decision_model import get_config, evaluate, metrics
+                        advice = evaluate(get_config(), metrics(current_plan), approved=True)
+                    return self.respond(200, recommend(scenario, rules, ai_advice=advice))
                 if route.startswith("/api/decision-model/"):
                     from planning_factory.adapters.decision_model import (
                         get_config, save_config, evaluate, synthetic_benchmark, metrics)
