@@ -478,6 +478,11 @@ def make_secure_handler(app):
             if not user:
                 return
             try:
+                if path == '/api/decision-model/config':
+                    if ROLES[user[1]] < ROLES['admin']:
+                        return self.respond(403, {'error': 'role admin required'})
+                    from planning_factory.adapters.decision_model import get_config
+                    return self.respond(200, get_config())
                 if path == '/api/session':
                     return self.respond(200, {'name': user[0], 'role': user[1], 'local': app.local_user is not None,
                                               **({'input_editable': False, 'source_kind': 'planning_workbook',
@@ -573,7 +578,7 @@ def make_secure_handler(app):
                 self.end_headers()
                 self.wfile.write(content)
                 return
-            user = self._user('admin' if path.startswith(('/api/settings/','/api/factory-source/')) else
+            user = self._user('admin' if path.startswith(('/api/settings/','/api/factory-source/')) or path == '/api/decision-model/config' else
                               'reparto' if path in ('/api/logout', '/api/assistant', '/api/explain', '/api/loads', '/api/quality', '/api/delays') else 'planner')
             if not user:
                 return
@@ -583,6 +588,28 @@ def make_secure_handler(app):
                 if app.state.workbook_input is not None and path.startswith('/api/rules'):
                     from planning_factory.adapters.workbook_workspace import edit_in_excel
                     edit_in_excel()
+                if path.startswith('/api/decision-model/'):
+                    from planning_factory.adapters.decision_model import (
+                        get_config, save_config, evaluate, metrics, synthetic_benchmark)
+                    data = self._body()
+                    if path == '/api/decision-model/config':
+                        result = save_config(data)
+                        app.audit(user, 'decision_model_config', 200, provider=result['provider'])
+                        return self.respond(200, result)
+                    if path == '/api/decision-model/evaluate':
+                        if set(data) != {'approved', 'question'}:
+                            raise ValidationError(['approved and question required'])
+                        _, planning_result = app.state.calculate()
+                        result = evaluate(get_config(), metrics(planning_result),
+                                          question=data['question'], approved=data['approved'])
+                    elif path == '/api/decision-model/benchmark':
+                        if set(data) != {'approved'}:
+                            raise ValidationError(['approved required'])
+                        result = synthetic_benchmark(get_config(), approved=data['approved'])
+                    else:
+                        return self.respond(404, {'error': 'unknown decision model operation'})
+                    app.audit(user, 'decision_model_shadow', 200, status_code=result['status'])
+                    return self.respond(200, result)
                 if path == '/api/logout':
                     digest, _ = app.session(self.headers.get('Cookie'))
                     with app.lock:
