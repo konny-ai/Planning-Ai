@@ -80,6 +80,27 @@ class DecisionCenterHttpTests(unittest.TestCase):
         self.assertTrue(new_case["whatif_delta"]["simulation_only"])
         self.assertEqual(self.request("POST", "/api/decision-center/review", {})[0], 404)
 
+    def test_windows_bom_history_flows_through_http(self):
+        self.start()
+        status, baseline = self.request("POST", "/api/decision-center/recommend",
+                                        {"ai_approved": False})
+        self.assertEqual(status, 200)
+        summary = baseline["risk"]["summary"]
+        history = [{"late_orders": summary["late_orders"],
+                    "unscheduled_units": summary["unscheduled_units"],
+                    "max_resource_utilization_pct": summary["max_resource_utilization_pct"],
+                    "late_actual": i % 5 == 0} for i in range(100)]
+        filename = Path(self.folder.name) / "missing_history.json"
+        filename.write_text(json.dumps({"schema_version": 1, "rows": history}),
+                            encoding="utf-8-sig")
+        status, report = self.request("POST", "/api/decision-center/recommend",
+                                      {"ai_approved": False})
+        self.assertEqual(status, 200)
+        risk = report["historical_risk"]
+        self.assertEqual(risk["status"], "provisional")
+        self.assertEqual(risk["validation_count"], 20)
+        self.assertLess(risk["brier_score"], .25)
+
     def test_reject_untrusted_browser_scenario_and_unknown_resource(self):
         self.start()
         self.assertEqual(self.request("POST", "/api/decision-center/recommend",

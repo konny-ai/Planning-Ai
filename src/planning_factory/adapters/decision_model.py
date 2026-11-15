@@ -67,7 +67,7 @@ def get_config():
     path = configuration_path()
     if not path.exists():
         return dict(DEFAULT)
-    return validate_config(json.loads(path.read_text(encoding="utf-8")))
+    return validate_config(json.loads(path.read_text(encoding="utf-8-sig")))
 
 
 def save_config(value):

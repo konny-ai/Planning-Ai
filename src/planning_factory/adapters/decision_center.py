@@ -114,7 +114,7 @@ def check_rules(raw):
 
 def get_rules():
     path = rules_path()
-    return check_rules(json.loads(path.read_text(encoding="utf-8"))) if path.is_file() else check_rules(DEFAULT_RULES)
+    return check_rules(json.loads(path.read_text(encoding="utf-8-sig"))) if path.is_file() else check_rules(DEFAULT_RULES)
 
 
 def save_rules(value):
@@ -346,7 +346,7 @@ def record_path(custom_path=None):
 def _read_reviews(path):
     if not path.exists():
         return {"schema_version": 1, "reviews": {}}
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8-sig"))
     if not isinstance(data, dict) or data.get("schema_version") != 1 or not isinstance(data.get("reviews"), dict):
         raise ValueError("Invalid decision review log")
     return data

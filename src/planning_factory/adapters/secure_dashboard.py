@@ -486,6 +486,8 @@ def make_secure_handler(app):
                     from planning_factory.adapters.decision_center import get_rules
                     return self.respond(200, get_rules())
                 if path == '/api/decision-center/reviews':
+                    if ROLES[user[1]] < ROLES['planner']:
+                        return self.respond(403, {'error': 'role planner required'})
                     from planning_factory.adapters.decision_center import list_reviews
                     return self.respond(200, {'reviews': list_reviews(app._decision_review_path)})
                 if path == '/api/decision-model/config':

@@ -51,6 +51,15 @@ class DecisionModelTests(unittest.TestCase):
                 self.assertEqual(dm.save_config(config), dm.get_config())
                 self.assertFalse(path.with_suffix(".tmp").exists())
 
+    def test_windows_utf8_bom_config(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "decision-model.json"
+            config = {**dm.DEFAULT, "enabled": True, "provider": "baseline"}
+            import json
+            path.write_text(json.dumps(config), encoding="utf-8-sig")
+            with patch.dict("os.environ", {"PLANNING_DECISION_CONFIG": str(path)}):
+                self.assertEqual(dm.get_config(), config)
+
     def test_native_openai_choice(self):
         response = {"answers": [{"type": "choice", "choice": "CAPACITY_REVIEW",
                                  "confidence": .93}]}

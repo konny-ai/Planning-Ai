@@ -10,7 +10,7 @@ from planning_factory.adapters.decision_center import (
     DEFAULT_RULES, check_rules, get_rules, save_rules, select_profile, risks,
     recommend, review_decision, list_reviews,
 )
-from planning_factory.adapters.decision_history import risk_estimate, validate_history
+from planning_factory.adapters.decision_history import risk_estimate, validate_history, load_history
 from planning_factory.adapters.json_io import loads
 
 
@@ -103,6 +103,19 @@ class DecisionCenterContracts(unittest.TestCase):
             with self.assertRaises(ValueError):
                 review_decision(r, "reject", "planner",
                                 expected_digest=r["scenario_digest"], path=store)
+
+    def test_windows_utf8_bom_inputs_are_supported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rules_path = Path(tmp) / "rules.json"
+            rules_path.write_text(json.dumps(DEFAULT_RULES), encoding="utf-8-sig")
+            with patch.dict("os.environ", {"PLANNING_DECISION_RULES": str(rules_path)}):
+                self.assertEqual(get_rules()["profile"], "balanced")
+            history_path = Path(tmp) / "history.json"
+            rows = [{"late_orders": 0, "unscheduled_units": 0,
+                     "max_resource_utilization_pct": 40, "late_actual": False}]
+            history_path.write_text(json.dumps({"schema_version": 1, "rows": rows}),
+                                    encoding="utf-8-sig")
+            self.assertEqual(load_history(history_path), rows)
 
     def test_history_rejects_identifiers_and_leakage(self):
         with self.assertRaises(ValueError):

@@ -32,3 +32,5 @@ data/private/
 /out/
 /tmp*/
 /istanza/
+# Local decision-model QA artifacts (logs, test DBs, screenshots, virtualenvs).
+/.local-qa/

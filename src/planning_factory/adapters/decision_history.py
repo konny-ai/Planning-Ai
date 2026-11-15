@@ -49,7 +49,7 @@ def load_history(path=None):
         return []
     if path.stat().st_size > MAX_BYTES:
         raise ValueError("Historical dataset exceeds 1 MiB")
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
     if not isinstance(payload, dict) or payload.get("schema_version") != 1 or set(payload) != {"schema_version", "rows"}:
         raise ValueError("Historical dataset schema version mismatch")
     return validate_history(payload["rows"])
