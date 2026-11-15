@@ -248,6 +248,12 @@ def recommend(scenario, rules=None, *, published=None, ai_advice=None):
         raise ValueError("Selected plan did not pass independent verification")
     if ai_advice is not None and not isinstance(ai_advice, dict):
         raise ValueError("Invalid AI advisory result")
+    from planning_factory.adapters.decision_history import load_history, risk_estimate
+    try:
+        history_result = risk_estimate(baseline_risks["summary"], load_history(),
+                                       min_samples=rules["min_historical_samples"])
+    except (ValueError, OSError):
+        history_result = {"status": "invalid_local_dataset", "probability": None}
     report = {
         "schema_version": 1, "scenario_digest": scenario_digest(scenario),
         "policy_digest": _digest(rules), "profile": selected_profile,
@@ -262,7 +268,7 @@ def recommend(scenario, rules=None, *, published=None, ai_advice=None):
         "can_commit_to_erp": False, "published_plan_changed": False,
         "ai_advice": ai_advice if rules["use_ai_advice"] else None,
         "ai_is_advisory_only": True,
-        "historical_risk": {"status": "insufficient_data", "probability": None},
+        "historical_risk": history_result,
     }
     # The hash is stable across runs for identical inputs and evaluated results.
     report["decision_id"] = _digest({k: v for k, v in report.items() if k != "decision_id"})[:32]
