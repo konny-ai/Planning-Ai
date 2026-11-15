@@ -202,6 +202,14 @@ def recommend(scenario, rules=None, *, published=None, ai_advice=None):
     basis = published if published is not None else base
     baseline_risks = risks(scenario, base, rules)
     selected_profile, matched_rule = select_profile(baseline_risks["summary"], rules)
+    ai_influenced_profile = False
+    if (matched_rule is None and rules["use_ai_advice"] and isinstance(ai_advice, dict)
+            and ai_advice.get("status") == "shadow"):
+        choice = {"DELIVERY_RISK": "delivery", "CAPACITY_REVIEW": "balanced",
+                  "PLAN_REVIEW": "stability"}.get(ai_advice.get("label"))
+        if choice is not None:
+            selected_profile = choice
+            ai_influenced_profile = True
     objectives = _objectives(selected_profile, published)
     candidates = []
     rejected = []
@@ -258,6 +266,7 @@ def recommend(scenario, rules=None, *, published=None, ai_advice=None):
         "schema_version": 1, "scenario_digest": scenario_digest(scenario),
         "policy_digest": _digest(rules), "profile": selected_profile,
         "matched_rule": matched_rule,
+        "ai_influenced_profile": ai_influenced_profile,
         "objectives": list(objectives), "candidate_count": len(candidates),
         "candidates": candidates, "rejected": rejected,
         "winner_policy": "local_search" if winner_score.policy.startswith("local_swap:") else winner_score.policy,
