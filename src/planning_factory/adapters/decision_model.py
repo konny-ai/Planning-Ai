@@ -69,7 +69,7 @@ def metrics(plan):
     """Only coarse aggregates. No customers, orders, machines or operation ids."""
     return {"scheduled_count": len(plan.assignments),
             "unscheduled_count": len(plan.unscheduled),
-            "delivery_count": len(plan.deliveries)}
+            "delivery_count": len(plan.orders)}
 
 
 def baseline(summary):
