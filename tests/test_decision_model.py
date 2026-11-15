@@ -51,6 +51,29 @@ class DecisionModelTests(unittest.TestCase):
                 self.assertEqual(dm.save_config(config), dm.get_config())
                 self.assertFalse(path.with_suffix(".tmp").exists())
 
+    def test_native_openai_choice(self):
+        response = {"answers": [{"type": "choice", "choice": "CAPACITY_REVIEW",
+                                 "confidence": .93}]}
+        with patch.object(dm, "_http_json", return_value=response) as call:
+            result = dm._native_decision("openai_decisions", "gpt-6-luna", "dummy",
+                                         {"unscheduled_count": 2}, "")
+        self.assertEqual(result["label"], "CAPACITY_REVIEW")
+        self.assertTrue(call.call_args.args[0].endswith("/v1/decisions"))
+
+    def test_native_openrouter_choice(self):
+        response = {"answers": {"plan_review": {"type": "choice",
+                    "choice": "PLAN_REVIEW", "confidence": .88}}}
+        with patch.object(dm, "_http_json", return_value=response) as call:
+            result = dm._native_decision("openrouter_decisions", "scaledown/classify-1",
+                                         "dummy", {"scheduled_count": 0}, "")
+        self.assertEqual(result["label"], "PLAN_REVIEW")
+        self.assertIn("/api/alpha/decisions", call.call_args.args[0])
+
+    def test_native_refusal_is_failure(self):
+        with patch.object(dm, "_http_json", return_value={"answers": [{"type": "refusal"}]}):
+            with self.assertRaises(ValueError):
+                dm._native_decision("openai_decisions", "gpt-6-luna", "dummy", {}, "")
+
     def test_benchmark_never_calls_provider(self):
         config = {**dm.DEFAULT, "enabled": True, "provider": "baseline"}
         with patch.object(dm, "_http_json", side_effect=AssertionError("network forbidden")):
