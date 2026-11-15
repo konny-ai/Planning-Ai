@@ -12,7 +12,7 @@
 <p><label><input id="enabled" type="checkbox"> Abilita Decision Model (disattivato inizialmente)</label></p>
 <p><label for="provider">Provider</label><br><select id="provider">
 <option value="disabled">Disattivato</option><option value="baseline">Baseline locale deterministica (senza AI)</option>
-<option value="local">Ollama / OpenAI-compatible locale</option><option value="openrouter_decisions">OpenRouter Decisions (ScaleDown / Jev / modelli compatibili)</option><option value="openai_decisions">OpenAI Decisions API (gpt-6-luna)</option><option value="openrouter">OpenRouter Chat</option>
+<option value="local">Ollama / OpenAI-compatible locale</option><option value="local_decisions">Decision Model locale (System One su loopback)</option><option value="openrouter_decisions">OpenRouter Decisions (ScaleDown / Jev / modelli compatibili)</option><option value="openai_decisions">OpenAI Decisions API (gpt-6-luna)</option><option value="openrouter">OpenRouter Chat</option>
 <option value="openai">OpenAI API</option><option value="anthropic">Anthropic API</option></select></p>
 <p><label for="model">Identificativo modello</label><br><input id="model" maxlength="120" placeholder="Modello disponibile presso il provider" size="46"></p>
 <p><label for="endpoint">Endpoint locale (solo loopback /v1)</label><br><input id="endpoint" size="46" value="http://127.0.0.1:11434/v1"></p>
