@@ -7,6 +7,7 @@ on:
     paths:
       - 'src/planning_factory/adapters/decision_model.py'
       - 'src/planning_factory/adapters/dashboard_api.py'
+      - 'src/planning_factory/adapters/secure_dashboard.py'
       - 'src/planning_factory/web/decision-model*'
       - 'src/planning_factory/web/index.html'
       - 'tests/test_decision_model.py'
@@ -21,7 +22,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -e .
       - run: python -m unittest discover -s tests -p test_decision_model.py -t .
-      - run: python -m compileall -q src/planning_factory/adapters/decision_model.py src/planning_factory/adapters/dashboard_api.py
+      - run: python -m compileall -q src/planning_factory/adapters/decision_model.py src/planning_factory/adapters/dashboard_api.py src/planning_factory/adapters/secure_dashboard.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
