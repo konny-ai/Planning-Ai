@@ -138,6 +138,11 @@ def _digest(value):
     return sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
 
+def rules_digest(rules=None):
+    """Stable decision policy fingerprint for review revalidation."""
+    return _digest(check_rules(rules if rules is not None else get_rules()))
+
+
 def risks(scenario, baseline, rules):
     """Explain measured risk signals, not fabricated probability estimates."""
     late = sum(o.tardiness_seconds is not None and o.tardiness_seconds > 0 for o in baseline.orders)
@@ -294,7 +299,7 @@ def recommend(scenario, rules=None, *, published=None, published_scenario=None, 
         history_result = {"status": "invalid_local_dataset", "probability": None}
     report = {
         "schema_version": 1, "scenario_digest": scenario_digest(scenario),
-        "policy_digest": _digest(rules), "profile": selected_profile,
+        "policy_digest": rules_digest(rules), "profile": selected_profile,
         "reference_scenario_digest": scenario_digest(published_scenario if published_scenario is not None else scenario)
             if published is not None else None,
         "reference_type": "current_verified_plan" if published is not None else "generated_baseline",
