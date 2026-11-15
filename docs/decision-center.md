@@ -72,6 +72,11 @@ sono etichette strutturate e relative spiegazioni: **il ruolo explanation
 non è ancora un generatore di relazioni libere**; gli indicatori e i
 confronti verificati costituiscono la spiegazione deterministica.
 
+Le chiamate ai provider esterni sono inoltre limitate a **24 chiamate
+all'ora per processo server**; la quota è in memoria e si azzera al
+riavvio. Questo è un freno di sicurezza, **non** un vero budget monetario
+persistente: i costi vanno monitorati anche presso il provider.
+
 Tutti i ruoli sono disattivi finché `use_ai_advice=false` (impostazione
 iniziale). L'analisi richiede `ai_approved=true` per quella richiesta.
 Inoltre, i provider remoti richiedono il flag globale
