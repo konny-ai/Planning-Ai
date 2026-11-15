@@ -68,6 +68,9 @@ class DecisionModelTests(unittest.TestCase):
                                          "dummy", {"scheduled_count": 0}, "")
         self.assertEqual(result["label"], "PLAN_REVIEW")
         self.assertIn("/api/alpha/decisions", call.call_args.args[0])
+        payload = call.call_args.args[2]
+        self.assertEqual(payload["questions"]["plan_review"]["type"], "choice")
+        self.assertIn("CAPACITY_REVIEW", payload["questions"]["plan_review"]["criteria"])
 
     def test_native_refusal_is_failure(self):
         with patch.object(dm, "_http_json", return_value={"answers": [{"type": "refusal"}]}):
