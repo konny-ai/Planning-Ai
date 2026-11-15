@@ -607,15 +607,8 @@ def make_secure_handler(app):
                         app.audit(user, 'decision_center_rules', 200, policy_digest=result['profile'])
                         return self.respond(200, result)
                     if path == '/api/decision-center/recommend':
-                        if set(data) != {'ai_approved'} or type(data['ai_approved']) is not bool:
-                            raise ValidationError(['boolean ai_approved required'])
-                        rules = get_rules()
-                        scenario, current_plan = app.state.calculate()
-                        advice = None
-                        if rules['use_ai_advice'] and data['ai_approved']:
-                            from planning_factory.adapters.decision_model import get_config, evaluate, metrics
-                            advice = evaluate(get_config(), metrics(current_plan), approved=True)
-                        report = recommend(scenario, rules, ai_advice=advice)
+                        from planning_factory.adapters.decision_workflow import build_recommendation
+                        report = build_recommendation(app.state, data)
                         with app.lock:
                             app._decision_reports[report['decision_id']] = report
                             while len(app._decision_reports) > 48:
@@ -623,7 +616,7 @@ def make_secure_handler(app):
                         app.audit(user, 'decision_center_recommend', 200,
                                   decision_id=report['decision_id'],
                                   scenario_digest=report['scenario_digest'],
-                                  ai_used=advice is not None)
+                                  ai_used=report['ai_advice'] is not None)
                         return self.respond(200, report)
                     if path == '/api/decision-center/review':
                         if set(data) != {'decision_id', 'expected_digest', 'action', 'note'}:
