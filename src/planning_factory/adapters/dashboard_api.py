@@ -776,15 +776,8 @@ def make_handler(state: DashboardState):
                         get_rules, save_rules, recommend)
                     if route == "/api/decision-center/rules":
                         return self.respond(200, save_rules(body))
-                    if set(body) != {"ai_approved"} or type(body["ai_approved"]) is not bool:
-                        raise ValidationError(["expected a boolean ai_approved"])
-                    rules = get_rules()
-                    scenario, current_plan = state.calculate()
-                    advice = None
-                    if rules["use_ai_advice"] and body["ai_approved"]:
-                        from planning_factory.adapters.decision_model import get_config, evaluate, metrics
-                        advice = evaluate(get_config(), metrics(current_plan), approved=True)
-                    return self.respond(200, recommend(scenario, rules, ai_advice=advice))
+                    from planning_factory.adapters.decision_workflow import build_recommendation
+                    return self.respond(200, build_recommendation(state, body))
                 if route.startswith("/api/decision-model/"):
                     from planning_factory.adapters.decision_model import (
                         get_config, save_config, evaluate, synthetic_benchmark, metrics)
