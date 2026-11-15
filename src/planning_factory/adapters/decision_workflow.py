@@ -69,7 +69,8 @@ def build_recommendation(state, payload):
                           "risk": "Classify the principal production risk.",
                           "explanation": "Explain the classification concisely with the supplied aggregates."
                          }[role], approved=True)
-    result = recommend(scenario, rules, ai_advice=role_results.get("strategy"))
+    result = recommend(scenario, rules, published=current,
+                       published_scenario=source, ai_advice=role_results.get("strategy"))
     result["model_role_results"] = role_results
     result["whatif_delta"] = whatif
     return result
