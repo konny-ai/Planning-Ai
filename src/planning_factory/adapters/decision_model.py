@@ -8,9 +8,12 @@ from __future__ import annotations
 import json
 import math
 import os
+import threading
+import time
+from collections import deque
 from pathlib import Path
 from urllib.parse import urlsplit
-from urllib.request import Request, build_opener, HTTPRedirectHandler
+from urllib.request import Request, build_opener, HTTPRedirectHandler, ProxyHandler
 
 PROVIDERS = ("disabled", "baseline", "openrouter", "openai", "anthropic", "local", "openrouter_decisions", "openai_decisions", "local_decisions")
 LABELS = ("DELIVERY_RISK", "CAPACITY_REVIEW", "PLAN_REVIEW", "NO_ALERT", "UNCERTAIN")
@@ -18,6 +21,21 @@ DEFAULT = {"enabled": False, "provider": "disabled", "model": "",
            "endpoint": "http://127.0.0.1:11434/v1", "threshold": 0.75,
            "external_approved": False}
 MAX_QUESTION = 500
+EXTERNAL_MAX_CALLS_PER_HOUR = 24
+_EXTERNAL_CALLS = deque()
+_EXTERNAL_LOCK = threading.Lock()
+
+
+def _reserve_external_call():
+    """In-process fail-closed rate guard; no monetary-budget guarantee."""
+    now = time.monotonic()
+    with _EXTERNAL_LOCK:
+        while _EXTERNAL_CALLS and now - _EXTERNAL_CALLS[0] >= 3600:
+            _EXTERNAL_CALLS.popleft()
+        if len(_EXTERNAL_CALLS) >= EXTERNAL_MAX_CALLS_PER_HOUR:
+            raise PermissionError("decision_model_hourly_limit")
+        _EXTERNAL_CALLS.append(now)
+
 
 
 def configuration_path():
@@ -105,7 +123,11 @@ class NoRedirect(HTTPRedirectHandler):
 def _http_json(url, headers, payload):
     request = Request(url, json.dumps(payload).encode("utf-8"),
                       headers={"Content-Type": "application/json", **headers}, method="POST")
-    with build_opener(NoRedirect()).open(request, timeout=12) as response:
+    host = urlsplit(url).hostname
+    opener = (build_opener(ProxyHandler({}), NoRedirect())
+              if host in ("localhost", "127.0.0.1", "::1")
+              else build_opener(NoRedirect()))
+    with opener.open(request, timeout=12) as response:
         if response.status != 200:
             raise ValueError("Provider returned a non-success status")
         if int(response.headers.get("Content-Length", "0")) > 32768:
@@ -212,6 +234,9 @@ def evaluate(config, summary, *, question="", approved=False):
     if not isinstance(question, str) or len(question) > MAX_QUESTION:
         raise ValueError("Question too long")
     try:
+        if config["provider"] in ("openrouter", "openrouter_decisions",
+                                  "openai", "openai_decisions", "anthropic"):
+            _reserve_external_call()
         raw = _predict(config, summary, question)
         if not isinstance(raw, dict) or raw.get("label") not in LABELS:
             raise ValueError("Invalid label")
